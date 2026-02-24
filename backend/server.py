@@ -724,6 +724,88 @@ async def delete_order(
         )
         return {"message": "Delete request submitted for approval"}
 
+@api_router.patch("/orders/{order_id}")
+async def update_order(
+    order_id: str,
+    update_data: Dict[str, Any],
+    current_user: User = Depends(get_current_user)
+):
+    """Update order details (before ready status)"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Check if order is already ready
+    if order.get('is_ready'):
+        raise HTTPException(status_code=400, detail="Cannot edit order after it's marked as ready")
+    
+    # Track modification
+    update_fields = {
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "modification_count": order.get('modification_count', 0) + 1
+    }
+    
+    # Allow specific fields to be updated
+    allowed_fields = ['flavour', 'size_pounds', 'cake_image_url', 'delivery_date', 'delivery_time', 
+                     'name_on_cake', 'special_instructions', 'total_amount', 'secondary_images']
+    
+    for field in allowed_fields:
+        if field in update_data:
+            update_fields[field] = update_data[field]
+    
+    await db.orders.update_one({"id": order_id}, {"$set": update_fields})
+    
+    # Log the update
+    log = Log(
+        order_id=order_id,
+        action="order_updated",
+        performed_by=current_user.id,
+        before_data={"fields": list(update_data.keys())},
+        after_data=update_data
+    )
+    log_doc = log.model_dump()
+    log_doc['timestamp'] = log_doc['timestamp'].isoformat()
+    await db.logs.insert_one(log_doc)
+    
+    return {"message": "Order updated successfully"}
+
+@api_router.patch("/orders/{order_id}/status")
+async def update_order_status(
+    order_id: str,
+    status: OrderStatus,
+    current_user: User = Depends(get_current_user)
+):
+    """Update order status"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    update_data = {
+        "status": status.value,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # If marking as ready
+    if status == OrderStatus.READY:
+        update_data['is_ready'] = True
+        update_data['ready_at'] = datetime.now(timezone.utc).isoformat()
+    
+    await db.orders.update_one({"id": order_id}, {"$set": update_data})
+    
+    # Log status change
+    log = Log(
+        order_id=order_id,
+        action="status_changed",
+        performed_by=current_user.id,
+        before_data={"status": order.get('status')},
+        after_data={"status": status.value}
+    )
+    log_doc = log.model_dump()
+    log_doc['timestamp'] = log_doc['timestamp'].isoformat()
+    await db.logs.insert_one(log_doc)
+    
+    return {"message": f"Order status updated to {status.value}"}
+
 # ==================== PAYMENT MANAGEMENT ====================
 
 @api_router.post("/payments")
