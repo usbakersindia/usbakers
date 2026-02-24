@@ -567,6 +567,244 @@ async def get_zones(outlet_id: Optional[str] = None, current_user: User = Depend
     
     return zones
 
+# ==================== IMAGE UPLOAD ====================
+
+@api_router.post("/upload-image")
+async def upload_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload an image and return the URL"""
+    try:
+        # Validate file type
+        if not file.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image")
+        
+        # Generate unique filename
+        file_extension = file.filename.split('.')[-1]
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        file_path = ROOT_DIR / "uploads" / unique_filename
+        
+        # Save file
+        contents = await file.read()
+        with open(file_path, 'wb') as f:
+            f.write(contents)
+        
+        # Return URL (relative path)
+        image_url = f"/uploads/{unique_filename}"
+        return {"url": image_url, "filename": unique_filename}
+    
+    except Exception as e:
+        logger.error(f"Image upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Image upload failed")
+
+# ==================== ORDER MANAGEMENT ====================
+
+@api_router.post("/orders")
+async def create_order(
+    order_data: OrderCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new order"""
+    # Validate outlet exists
+    outlet = await db.outlets.find_one({"id": order_data.outlet_id}, {"_id": 0})
+    if not outlet:
+        raise HTTPException(status_code=404, detail="Outlet not found")
+    
+    # Validate zone if delivery is needed
+    if order_data.needs_delivery and order_data.zone_id:
+        zone = await db.zones.find_one({"id": order_data.zone_id}, {"_id": 0})
+        if not zone:
+            raise HTTPException(status_code=404, detail="Zone not found")
+    
+    # Create order
+    order = Order(
+        order_type=order_data.order_type,
+        receiver_info=order_data.receiver_info,
+        customer_info=order_data.customer_info,
+        needs_delivery=order_data.needs_delivery,
+        delivery_address=order_data.delivery_address,
+        delivery_city=order_data.delivery_city,
+        zone_id=order_data.zone_id,
+        occasion=order_data.occasion,
+        flavour=order_data.flavour,
+        size_pounds=order_data.size_pounds,
+        cake_image_url=order_data.cake_image_url,
+        secondary_images=order_data.secondary_images,
+        name_on_cake=order_data.name_on_cake,
+        special_instructions=order_data.special_instructions,
+        delivery_date=order_data.delivery_date,
+        delivery_time=order_data.delivery_time,
+        outlet_id=order_data.outlet_id,
+        created_by=current_user.id,
+        order_taken_by=current_user.id,
+        total_amount=order_data.total_amount,
+        is_hold=True  # Always starts in hold
+    )
+    
+    doc = order.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    doc['updated_at'] = doc['updated_at'].isoformat()
+    
+    await db.orders.insert_one(doc)
+    
+    return {"message": "Order created successfully", "order_id": order.id, "order_number": order.order_number}
+
+@api_router.get("/orders/hold")
+async def get_hold_orders(
+    outlet_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get all orders on hold"""
+    query = {"is_hold": True, "is_deleted": False}
+    
+    # Filter by outlet if user is not super admin
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
+        query["outlet_id"] = current_user.outlet_id
+    elif outlet_id:
+        query["outlet_id"] = outlet_id
+    
+    orders = await db.orders.find(query, {"_id": 0}).to_list(1000)
+    
+    for order in orders:
+        if isinstance(order.get('created_at'), str):
+            order['created_at'] = datetime.fromisoformat(order['created_at'])
+        if isinstance(order.get('updated_at'), str):
+            order['updated_at'] = datetime.fromisoformat(order['updated_at'])
+    
+    return orders
+
+@api_router.get("/orders/manage")
+async def get_manage_orders(
+    outlet_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get all orders in manage (not hold, not deleted)"""
+    query = {"is_hold": False, "is_deleted": False}
+    
+    # Filter by outlet if user is not super admin
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
+        query["outlet_id"] = current_user.outlet_id
+    elif outlet_id:
+        query["outlet_id"] = outlet_id
+    
+    orders = await db.orders.find(query, {"_id": 0}).to_list(1000)
+    
+    for order in orders:
+        if isinstance(order.get('created_at'), str):
+            order['created_at'] = datetime.fromisoformat(order['created_at'])
+        if isinstance(order.get('updated_at'), str):
+            order['updated_at'] = datetime.fromisoformat(order['updated_at'])
+    
+    return orders
+
+@api_router.delete("/orders/{order_id}")
+async def delete_order(
+    order_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Mark order as deleted (requires approval for non-super-admin)"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if current_user.role == UserRole.SUPER_ADMIN:
+        # Super admin can delete directly
+        await db.orders.update_one(
+            {"id": order_id},
+            {"$set": {"is_deleted": True, "delete_approved_by": current_user.id}}
+        )
+        return {"message": "Order deleted successfully"}
+    else:
+        # Others need approval
+        await db.orders.update_one(
+            {"id": order_id},
+            {"$set": {"delete_requested_by": current_user.id}}
+        )
+        return {"message": "Delete request submitted for approval"}
+
+# ==================== PAYMENT MANAGEMENT ====================
+
+@api_router.post("/payments")
+async def record_payment(
+    payment_data: PaymentCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Record a payment for an order"""
+    # Get order
+    order = await db.orders.find_one({"id": payment_data.order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Create payment record
+    payment = Payment(
+        order_id=payment_data.order_id,
+        amount=payment_data.amount,
+        payment_method=payment_data.payment_method,
+        petpooja_bill_number=payment_data.petpooja_bill_number,
+        recorded_by=current_user.id
+    )
+    
+    doc = payment.model_dump()
+    doc['paid_at'] = doc['paid_at'].isoformat()
+    
+    await db.payments.insert_one(doc)
+    
+    # Update order paid amount
+    new_paid_amount = order['paid_amount'] + payment_data.amount
+    new_pending_amount = order['total_amount'] - new_paid_amount
+    
+    update_data = {
+        "paid_amount": new_paid_amount,
+        "pending_amount": new_pending_amount,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Add PetPooja bill number if provided
+    if payment_data.petpooja_bill_number:
+        bill_numbers = order.get('petpooja_bill_numbers', [])
+        if payment_data.petpooja_bill_number not in bill_numbers:
+            bill_numbers.append(payment_data.petpooja_bill_number)
+            update_data['petpooja_bill_numbers'] = bill_numbers
+    
+    # Check if payment is >= 40% of total, move to manage orders
+    if new_paid_amount >= (order['total_amount'] * 0.4):
+        update_data['is_hold'] = False
+    
+    await db.orders.update_one({"id": payment_data.order_id}, {"$set": update_data})
+    
+    # Log the payment
+    log = Log(
+        order_id=payment_data.order_id,
+        action="payment_recorded",
+        performed_by=current_user.id,
+        after_data={"amount": payment_data.amount, "method": payment_data.payment_method}
+    )
+    log_doc = log.model_dump()
+    log_doc['timestamp'] = log_doc['timestamp'].isoformat()
+    await db.logs.insert_one(log_doc)
+    
+    return {
+        "message": "Payment recorded successfully",
+        "paid_amount": new_paid_amount,
+        "pending_amount": new_pending_amount,
+        "moved_to_manage": new_paid_amount >= (order['total_amount'] * 0.4)
+    }
+
+@api_router.get("/payments/{order_id}")
+async def get_order_payments(
+    order_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Get all payments for an order"""
+    payments = await db.payments.find({"order_id": order_id}, {"_id": 0}).to_list(1000)
+    
+    for payment in payments:
+        if isinstance(payment.get('paid_at'), str):
+            payment['paid_at'] = datetime.fromisoformat(payment['paid_at'])
+    
+    return payments
+
 # ==================== DASHBOARD (Super Admin) ====================
 
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
