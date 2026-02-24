@@ -3,6 +3,10 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import Login from './pages/Login';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import UserManagement from './pages/UserManagement';
+import OutletManagement from './pages/OutletManagement';
+import ZoneManagement from './pages/ZoneManagement';
+import Settings from './pages/Settings';
 import '@/App.css';
 
 const AppRoutes = () => {
@@ -27,6 +31,38 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['super_admin']}>
             <SuperAdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/users"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin']}>
+            <UserManagement />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/outlets"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin']}>
+            <OutletManagement />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/zones"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin']}>
+            <ZoneManagement />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin']}>
+            <Settings />
           </ProtectedRoute>
         }
       />
