@@ -11,6 +11,8 @@ const Layout = ({ children }) => {
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', testId: 'nav-dashboard' },
+    { path: '/new-order', label: 'New Order', testId: 'nav-new-order' },
+    { path: '/hold-orders', label: 'Hold Orders', testId: 'nav-hold-orders' },
     { path: '/outlets', label: 'Outlets', testId: 'nav-outlets' },
     { path: '/users', label: 'Users', testId: 'nav-users' },
     { path: '/zones', label: 'Zones', testId: 'nav-zones' },
