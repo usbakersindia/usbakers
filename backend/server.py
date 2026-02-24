@@ -908,6 +908,9 @@ async def health_check():
 # Include the router in the main app
 app.include_router(api_router)
 
+# Serve uploaded images
+app.mount("/uploads", StaticFiles(directory=str(ROOT_DIR / "uploads")), name="uploads")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
