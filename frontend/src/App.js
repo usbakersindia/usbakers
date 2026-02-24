@@ -7,6 +7,8 @@ import UserManagement from './pages/UserManagement';
 import OutletManagement from './pages/OutletManagement';
 import ZoneManagement from './pages/ZoneManagement';
 import Settings from './pages/Settings';
+import NewOrder from './pages/NewOrder';
+import HoldOrders from './pages/HoldOrders';
 import '@/App.css';
 
 const AppRoutes = () => {
@@ -31,6 +33,22 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['super_admin']}>
             <SuperAdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/new-order"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
+            <NewOrder />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/hold-orders"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
+            <HoldOrders />
           </ProtectedRoute>
         }
       />
