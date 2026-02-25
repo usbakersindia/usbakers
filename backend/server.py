@@ -161,7 +161,8 @@ class Outlet(BaseModel):
     address: str
     city: str
     phone: str
-    incentive_percentage: float = 0.0
+    username: str  # Outlet login username
+    password_hash: str  # Outlet login password
     ready_time_buffer_minutes: int = 30  # Default 30 mins buffer
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -172,7 +173,8 @@ class OutletCreate(BaseModel):
     address: str
     city: str
     phone: str
-    incentive_percentage: float = 0.0
+    username: str
+    password: str
     ready_time_buffer_minutes: int = 30
 
 class OutletResponse(BaseModel):
