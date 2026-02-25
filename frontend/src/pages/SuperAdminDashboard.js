@@ -161,7 +161,7 @@ const SuperAdminDashboard = () => {
           </div>
         </CardContent>
       </Card>
-    </Layout>
+    </LayoutWithSidebar>
   );
 };
 
