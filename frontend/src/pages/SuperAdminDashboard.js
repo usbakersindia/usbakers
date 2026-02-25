@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import Layout from '../components/Layout';
+import LayoutWithSidebar from '../components/LayoutWithSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Users, ShoppingBag, DollarSign, Store, CheckCircle, Clock, Package } from 'lucide-react';
