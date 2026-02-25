@@ -244,6 +244,22 @@ const UserManagementNew = () => {
                           </SelectContent>
                         </Select>
                       </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="incentive">Incentive Percentage *</Label>
+                        <Input
+                          id="incentive"
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="100"
+                          value={formData.incentive_percentage}
+                          onChange={(e) => setFormData({ ...formData, incentive_percentage: parseFloat(e.target.value) })}
+                          required
+                          data-testid="user-incentive-input"
+                        />
+                        <p className="text-xs text-gray-500">Commission % for this user on orders they create</p>
+                      </div>
                     </div>
                   </div>
 
