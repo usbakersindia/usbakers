@@ -183,7 +183,7 @@ class OutletResponse(BaseModel):
     address: str
     city: str
     phone: str
-    incentive_percentage: float
+    username: str
     ready_time_buffer_minutes: int
     is_active: bool
     created_at: datetime
