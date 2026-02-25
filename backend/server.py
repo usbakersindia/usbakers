@@ -117,6 +117,7 @@ class User(BaseModel):
     phone: str
     role: UserRole  # Keep for backward compatibility, but permissions take precedence
     permissions: List[str] = []  # New: List of permission strings
+    incentive_percentage: float = 0.0  # Incentive for this user
     password_hash: str
     outlet_id: Optional[str] = None  # Can be assigned to specific outlet
     is_active: bool = True
@@ -129,6 +130,7 @@ class UserCreate(BaseModel):
     phone: str
     role: UserRole = UserRole.ORDER_MANAGER  # Default role for compatibility
     permissions: List[str] = []
+    incentive_percentage: float = 0.0
     password: str
     outlet_id: Optional[str] = None
 
@@ -139,6 +141,7 @@ class UserResponse(BaseModel):
     phone: str
     role: UserRole
     permissions: List[str]
+    incentive_percentage: float
     outlet_id: Optional[str] = None
     is_active: bool
     created_at: datetime
