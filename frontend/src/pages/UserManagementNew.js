@@ -117,7 +117,8 @@ const UserManagementNew = () => {
         phone: '',
         password: '',
         outlet_id: null,
-        permissions: []
+        permissions: [],
+        incentive_percentage: 0
       });
       fetchUsers();
     } catch (error) {
