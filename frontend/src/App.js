@@ -9,6 +9,7 @@ import ZoneManagement from './pages/ZoneManagement';
 import Settings from './pages/Settings';
 import NewOrder from './pages/NewOrder';
 import HoldOrders from './pages/HoldOrders';
+import Customers from './pages/Customers';
 import '@/App.css';
 
 const AppRoutes = () => {
