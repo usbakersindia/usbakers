@@ -605,12 +605,18 @@ async def create_outlet(
     current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
 ):
     """Create a new outlet (Super Admin only)"""
+    # Check if username already exists
+    existing = await db.outlets.find_one({"username": outlet_data.username})
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
     outlet = Outlet(
         name=outlet_data.name,
         address=outlet_data.address,
         city=outlet_data.city,
         phone=outlet_data.phone,
-        incentive_percentage=outlet_data.incentive_percentage,
+        username=outlet_data.username,
+        password_hash=get_password_hash(outlet_data.password),
         ready_time_buffer_minutes=outlet_data.ready_time_buffer_minutes,
         created_by=current_user.id
     )
