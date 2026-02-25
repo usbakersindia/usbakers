@@ -11,17 +11,26 @@ const Sidebar = () => {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
 
-  const isActive = (path) => location.pathname === path;
+  const isSuperAdmin = user?.role === 'super_admin';
 
-  const menuItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'nav-dashboard' },
-    { path: '/new-order', label: 'New Order', icon: ShoppingCart, testId: 'nav-new-order' },
-    { path: '/hold-orders', label: 'Hold Orders', icon: Clock, testId: 'nav-hold-orders' },
-    { path: '/outlets', label: 'Outlets', icon: Store, testId: 'nav-outlets' },
-    { path: '/users', label: 'Users', icon: Users, testId: 'nav-users' },
-    { path: '/zones', label: 'Zones', icon: MapPin, testId: 'nav-zones' },
-    { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
-  ];
+  // Define menu items based on role
+  const menuItems = isSuperAdmin 
+    ? [
+        // Super Admin Menu
+        { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'nav-dashboard' },
+        { path: '/customers', label: 'Customers', icon: Users, testId: 'nav-customers' },
+        { path: '/outlets', label: 'Outlets', icon: Store, testId: 'nav-outlets' },
+        { path: '/users', label: 'Users', icon: Users, testId: 'nav-users' },
+        { path: '/zones', label: 'Zones', icon: MapPin, testId: 'nav-zones' },
+        { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
+      ]
+    : [
+        // Outlet/User Menu
+        { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'nav-dashboard' },
+        { path: '/new-order', label: 'New Order', icon: ShoppingCart, testId: 'nav-new-order' },
+        { path: '/hold-orders', label: 'Hold Orders', icon: Clock, testId: 'nav-hold-orders' },
+        { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
+      ];
 
   return (
     <>
