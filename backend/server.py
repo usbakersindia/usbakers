@@ -897,7 +897,8 @@ async def petpooja_callback(request_data: Dict[str, Any]):
 @api_router.get("/petpooja/webhook-url")
 async def get_petpooja_webhook_url(current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))):
     """Get the PetPooja webhook URL to provide to PetPooja team"""
-    backend_url = os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001')
+    # Get the actual backend URL from environment
+    backend_url = os.environ.get('BACKEND_URL', os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001'))
     webhook_url = f"{backend_url}/api/petpooja/callback"
     
     return {
