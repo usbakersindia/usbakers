@@ -65,6 +65,46 @@ class Gender(str, Enum):
     FEMALE = "female"
     OTHER = "other"
 
+# ==================== PERMISSIONS ====================
+# Define all available permissions in the system
+AVAILABLE_PERMISSIONS = {
+    "orders": {
+        "can_create_order": "Create new orders",
+        "can_view_orders": "View orders",
+        "can_edit_orders": "Edit orders",
+        "can_delete_orders": "Delete orders",
+        "can_mark_ready": "Mark orders as ready"
+    },
+    "order_fields": {
+        "can_edit_customer_info": "Edit customer information",
+        "can_edit_flavour": "Edit cake flavour",
+        "can_edit_size": "Edit cake size",
+        "can_edit_delivery_date": "Edit delivery date",
+        "can_edit_delivery_time": "Edit delivery time",
+        "can_edit_total_amount": "Edit total amount",
+        "can_edit_special_instructions": "Edit special instructions",
+        "can_edit_cake_image": "Edit cake image",
+        "can_edit_name_on_cake": "Edit name on cake"
+    },
+    "payments": {
+        "can_record_payment": "Record payments",
+        "can_view_payments": "View payments",
+        "can_refund": "Process refunds"
+    },
+    "management": {
+        "can_manage_outlets": "Manage outlets",
+        "can_manage_zones": "Manage delivery zones",
+        "can_manage_users": "Manage users",
+        "can_view_reports": "View reports",
+        "can_manage_settings": "Manage settings"
+    },
+    "delivery": {
+        "can_assign_delivery": "Assign delivery partners",
+        "can_view_delivery_orders": "View delivery orders",
+        "can_mark_delivered": "Mark orders as delivered"
+    }
+}
+
 # ==================== MODELS ====================
 
 # User Models
