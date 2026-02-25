@@ -56,7 +56,7 @@ const AppRoutes = () => {
         path="/users"
         element={
           <ProtectedRoute allowedRoles={['super_admin']}>
-            <UserManagement />
+            <UserManagementNew />
           </ProtectedRoute>
         }
       />
