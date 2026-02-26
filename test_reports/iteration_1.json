@@ -1,0 +1,86 @@
+{
+  "summary": "WhatsApp Templates feature testing complete - Backend APIs 100% pass, Frontend UI working after bug fix",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/whatsapp/templates POST",
+        "issue": "BUG FIXED: Was returning 500 when creating new template - `WhatsAppTemplate` object has no attribute 'get'",
+        "resolution": "Fixed by refetching template from DB after insert to ensure consistent dict handling"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "WhatsAppTemplates.js",
+        "issue": "BUG FIXED: 401 Unauthorized errors when loading/saving templates - `token` was not exposed from AuthContext",
+        "priority": "HIGH",
+        "resolution": "Added `token` to AuthContext value export"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "WhatsApp Templates",
+        "issues": [
+          "React controlled/uncontrolled component warning for Switch - cosmetic warning in console",
+          "ESLint warning: useEffect missing fetchTemplates dependency - cosmetic warning"
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_whatsapp_api.py",
+    "/app/test_reports/pytest/pytest_whatsapp_final.xml"
+  ],
+  "action_items": [
+    "AiSensy account needs active plan for actual WhatsApp notifications to work - currently returns 'No Plan active on assistant'",
+    "Consider fixing the controlled/uncontrolled Switch warning in WhatsAppTemplates.js (line 191)"
+  ],
+  "critical_code_review_comments": [
+    "WhatsAppTemplates.js Line 59: useEffect dependency array warning - add fetchTemplates to deps or use useCallback"
+  ],
+  "updated_files": [
+    "/app/backend/server.py - Fixed WhatsApp template creation bug (line 1532-1537)",
+    "/app/frontend/src/contexts/AuthContext.js - Added token to context export (line 67)"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 tests passed)",
+    "frontend": "100% (all features working after fixes)"
+  },
+  "test_credentials": {
+    "super_admin": {
+      "email": "admin@usbakers.com",
+      "password": "admin123"
+    }
+  },
+  "seed_data_creation": "Created test templates for all 5 events (order_placed, order_confirmed, order_ready, out_for_delivery, delivered) with TEST_ prefix",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "WhatsApp Templates feature fully tested. Backend has 16 passing tests covering all CRUD operations, auth, and order event triggers. Frontend UI tested with Playwright - navigation, template loading, form filling, toggle, and save all working. AiSensy integration works but test account lacks active plan. Two bugs were fixed during testing: 1) Backend template creation 500 error, 2) Frontend 401 auth errors.",
+  "rca_of_the_issue": {
+    "backend_bug": {
+      "symptom": "POST /api/whatsapp/templates returned 500 Internal Server Error",
+      "root_cause": "When creating a new template, code tried to call .get() method on WhatsAppTemplate Pydantic model instead of dict",
+      "fix": "After inserting new template, refetch from DB to ensure consistent dict type handling"
+    },
+    "frontend_bug": {
+      "symptom": "WhatsApp Templates page showed 401 Unauthorized errors, failed to load/save templates",
+      "root_cause": "AuthContext.js did not export 'token' in the context value, but WhatsAppTemplates.js tried to use it",
+      "fix": "Added 'token' to the value object in AuthContext.js"
+    }
+  },
+  "features_verified": [
+    "WhatsApp Templates page loads correctly for Super Admin",
+    "All 5 event cards displayed (Order Placed, Order Confirmed, Order Ready, Out for Delivery, Delivered)",
+    "Each template card has Campaign Name input, Template Message textarea, Enable/Disable toggle, Save button",
+    "Template creation/update via POST /api/whatsapp/templates - WORKING",
+    "Template fetch via GET /api/whatsapp/templates - WORKING",
+    "Toggle enable/disable functionality - WORKING",
+    "Save button saves template configuration - WORKING",
+    "WhatsApp notification triggered on order creation (ORDER_PLACED event) - WORKING (AiSensy returns 400 due to no active plan)",
+    "WhatsApp notification triggered on order status update - WORKING",
+    "Navigation to WhatsApp Templates page via sidebar - WORKING"
+  ]
+}
