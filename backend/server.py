@@ -840,6 +840,12 @@ async def create_order(
     
     await db.orders.insert_one(doc)
     
+    # Send ORDER_PLACED WhatsApp notification (async, don't block)
+    try:
+        await send_whatsapp_notification(order.id, WhatsAppTemplateEvent.ORDER_PLACED)
+    except Exception as e:
+        logger.error(f"WhatsApp notification failed for order {order.id}: {str(e)}")
+    
     return {"message": "Order created successfully", "order_id": order.id, "order_number": order.order_number}
 
 @api_router.get("/orders/hold")
