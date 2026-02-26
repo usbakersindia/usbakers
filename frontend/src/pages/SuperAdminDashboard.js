@@ -11,19 +11,24 @@ const API = `${BACKEND_URL}/api`;
 
 const SuperAdminDashboard = () => {
   const [stats, setStats] = useState(null);
+  const [branchSummary, setBranchSummary] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchStats();
+    fetchDashboardData();
   }, []);
 
-  const fetchStats = async () => {
+  const fetchDashboardData = async () => {
     try {
-      const response = await axios.get(`${API}/dashboard/stats`);
-      setStats(response.data);
+      const [statsResponse, branchResponse] = await Promise.all([
+        axios.get(`${API}/dashboard/stats`),
+        axios.get(`${API}/dashboard/branch-summary`)
+      ]);
+      setStats(statsResponse.data);
+      setBranchSummary(branchResponse.data);
     } catch (error) {
-      console.error('Failed to fetch stats:', error);
+      console.error('Failed to fetch dashboard data:', error);
     } finally {
       setLoading(false);
     }
