@@ -359,6 +359,64 @@ class DashboardStats(BaseModel):
     total_users: int = 0
     orders_by_occasion: Dict[str, int] = {}
 
+# ==================== WHATSAPP TEMPLATE MODELS ====================
+
+class WhatsAppTemplateEvent(str, Enum):
+    """WhatsApp notification events for order lifecycle"""
+    ORDER_PLACED = "order_placed"
+    ORDER_CONFIRMED = "order_confirmed"
+    ORDER_READY = "order_ready"
+    OUT_FOR_DELIVERY = "out_for_delivery"
+    DELIVERED = "delivered"
+
+class WhatsAppTemplate(BaseModel):
+    """Configuration for a WhatsApp template for a specific event"""
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    event_type: WhatsAppTemplateEvent
+    campaign_name: str  # AiSensy campaign name
+    template_message: str  # Message with {{1}}, {{2}} placeholders
+    is_enabled: bool = False  # Disabled by default
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class WhatsAppTemplateCreate(BaseModel):
+    event_type: WhatsAppTemplateEvent
+    campaign_name: str
+    template_message: str
+    is_enabled: bool = False
+
+class WhatsAppTemplateUpdate(BaseModel):
+    campaign_name: Optional[str] = None
+    template_message: Optional[str] = None
+    is_enabled: Optional[bool] = None
+
+class WhatsAppTemplateResponse(BaseModel):
+    id: str
+    event_type: WhatsAppTemplateEvent
+    campaign_name: str
+    template_message: str
+    is_enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+class WhatsAppMessageLog(BaseModel):
+    """Log for sent WhatsApp messages"""
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    order_id: str
+    event_type: WhatsAppTemplateEvent
+    recipient_phone: str
+    recipient_name: str
+    campaign_name: str
+    status: str  # sent, failed
+    response_code: int
+    response_message: Optional[str] = None
+    message_id: Optional[str] = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 # ==================== AUTH UTILITIES ====================
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
