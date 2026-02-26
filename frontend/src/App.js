@@ -56,6 +56,14 @@ const AppRoutes = () => {
         }
       />
       <Route
+        path="/manage-orders"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
+            <ManageOrders />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/customers"
         element={
           <ProtectedRoute allowedRoles={['super_admin']}>
