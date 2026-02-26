@@ -431,6 +431,25 @@ const NewOrder = () => {
                   </Select>
                 </div>
                 <div>
+                  <Label>Order Taken By *</Label>
+                  <Select
+                    required
+                    value={formData.order_taken_by}
+                    onValueChange={(value) => setFormData({ ...formData, order_taken_by: value })}
+                  >
+                    <SelectTrigger data-testid="order-taken-by-select">
+                      <SelectValue placeholder="Select user" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.name} ({user.incentive_percentage}% incentive)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
                   <Label>Occasion</Label>
                   <Select
                     value={formData.occasion}
