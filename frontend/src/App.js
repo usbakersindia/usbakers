@@ -11,6 +11,7 @@ import NewOrder from './pages/NewOrder';
 import HoldOrders from './pages/HoldOrders';
 import Customers from './pages/Customers';
 import WhatsAppTemplates from './pages/WhatsAppTemplates';
+import ManageOrders from './pages/ManageOrders';
 import '@/App.css';
 
 const AppRoutes = () => {
