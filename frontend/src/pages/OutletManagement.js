@@ -28,7 +28,8 @@ const OutletManagement = () => {
     address: '',
     city: '',
     phone: '',
-    incentive_percentage: 0,
+    username: '',
+    password: '',
     ready_time_buffer_minutes: 30
   });
 
