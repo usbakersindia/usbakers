@@ -291,9 +291,9 @@ const OutletManagement = () => {
                 </div>
                 <div className="pt-2 border-t">
                   <div className="flex justify-between">
-                    <span className="text-sm text-gray-500">Incentive</span>
+                    <span className="text-sm text-gray-500">Username</span>
                     <span className="text-sm font-bold" style={{ color: '#e92587' }}>
-                      {outlet.incentive_percentage}%
+                      {outlet.username}
                     </span>
                   </div>
                   <div className="flex justify-between mt-1">
