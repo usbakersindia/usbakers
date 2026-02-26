@@ -1530,8 +1530,14 @@ async def create_whatsapp_template(
         template_doc['updated_at'] = template_doc['updated_at'].isoformat()
         
         await db.whatsapp_templates.insert_one(template_doc)
+        
+        # Fetch the inserted template as dict for consistent handling
+        template = await db.whatsapp_templates.find_one(
+            {"event_type": template_data.event_type.value},
+            {"_id": 0}
+        )
     
-    # Convert datetime strings for response
+    # Convert datetime strings for response (template is now always a dict)
     if isinstance(template.get('created_at'), str):
         template['created_at'] = datetime.fromisoformat(template['created_at'])
     if isinstance(template.get('updated_at'), str):
