@@ -3,7 +3,8 @@ import axios from 'axios';
 import LayoutWithSidebar from '../components/LayoutWithSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Users, ShoppingBag, DollarSign, Store, CheckCircle, Clock, Package } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Users, ShoppingBag, DollarSign, Store, CheckCircle, Clock, Package, TrendingUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
