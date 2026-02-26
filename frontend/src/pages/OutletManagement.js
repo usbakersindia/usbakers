@@ -186,19 +186,29 @@ const OutletManagement = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="incentive">Incentive Percentage *</Label>
+                  <Label htmlFor="username">Outlet Username *</Label>
                   <Input
-                    id="incentive"
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                    value={formData.incentive_percentage}
-                    onChange={(e) => setFormData({ ...formData, incentive_percentage: parseFloat(e.target.value) })}
+                    id="username"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                     required
-                    data-testid="outlet-incentive-input"
+                    placeholder="e.g., downtown_bakery"
+                    data-testid="outlet-username-input"
                   />
-                  <p className="text-xs text-gray-500">Incentive % for order managers</p>
+                  <p className="text-xs text-gray-500">Username for outlet login</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password">Outlet Password *</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    required
+                    data-testid="outlet-password-input"
+                  />
+                  <p className="text-xs text-gray-500">Password for outlet login</p>
                 </div>
 
                 <div className="space-y-2">
