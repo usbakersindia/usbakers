@@ -1349,6 +1349,229 @@ async def get_dashboard_stats(
         orders_by_occasion=orders_by_occasion
     )
 
+# ==================== WHATSAPP NOTIFICATION FUNCTIONS ====================
+
+async def send_whatsapp_notification(
+    order_id: str,
+    event_type: WhatsAppTemplateEvent
+) -> bool:
+    """
+    Send WhatsApp notification for an order event.
+    Returns True if successful, False otherwise.
+    """
+    try:
+        # Get the template for this event
+        template = await db.whatsapp_templates.find_one(
+            {"event_type": event_type.value},
+            {"_id": 0}
+        )
+        
+        if not template or not template.get('is_enabled'):
+            logger.info(f"WhatsApp template for {event_type.value} is not enabled")
+            return False
+        
+        # Get order details
+        order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+        if not order:
+            logger.error(f"Order {order_id} not found")
+            return False
+        
+        # Extract customer info
+        customer_info = order.get('customer_info', {})
+        customer_name = customer_info.get('name', 'Customer')
+        customer_phone = customer_info.get('phone', '')
+        
+        # Validate phone number
+        if not customer_phone or not customer_phone.startswith('+'):
+            logger.warning(f"Invalid phone number for order {order_id}: {customer_phone}")
+            return False
+        
+        # Prepare template parameters based on order data
+        # Parameters: customer_name, order_number, delivery_date, delivery_time
+        params = [
+            customer_name,
+            order.get('order_number', order_id),
+            order.get('delivery_date', 'N/A'),
+            order.get('delivery_time', 'N/A')
+        ]
+        
+        # Prepare AiSensy API request
+        payload = {
+            "apiKey": AISENSY_API_KEY,
+            "campaignName": template['campaign_name'],
+            "destination": customer_phone,
+            "userName": customer_name,
+            "source": "bakery_crm",
+            "templateParams": params,
+            "attributes": {
+                "order_id": order_id,
+                "event_type": event_type.value
+            }
+        }
+        
+        # Send request to AiSensy
+        response = requests.post(
+            AISENSY_API_ENDPOINT,
+            json=payload,
+            timeout=30,
+            headers={"Content-Type": "application/json"}
+        )
+        
+        # Log the message attempt
+        log = WhatsAppMessageLog(
+            order_id=order_id,
+            event_type=event_type,
+            recipient_phone=customer_phone,
+            recipient_name=customer_name,
+            campaign_name=template['campaign_name'],
+            status="sent" if response.status_code == 200 else "failed",
+            response_code=response.status_code,
+            response_message=response.text if response.status_code != 200 else "Success",
+            message_id=response.json().get('messageId') if response.status_code == 200 and response.text else None
+        )
+        
+        log_doc = log.model_dump()
+        log_doc['timestamp'] = log_doc['timestamp'].isoformat()
+        await db.whatsapp_logs.insert_one(log_doc)
+        
+        if response.status_code == 200:
+            logger.info(f"WhatsApp notification sent for order {order_id}, event: {event_type.value}")
+            return True
+        else:
+            logger.warning(f"Failed to send WhatsApp notification: {response.status_code} - {response.text}")
+            return False
+            
+    except requests.exceptions.Timeout:
+        logger.error(f"Timeout while sending WhatsApp notification for order {order_id}")
+        return False
+    except Exception as e:
+        logger.error(f"Error sending WhatsApp notification for order {order_id}: {str(e)}")
+        return False
+
+# ==================== WHATSAPP TEMPLATE ENDPOINTS ====================
+
+@api_router.get("/whatsapp/templates", response_model=List[WhatsAppTemplateResponse])
+async def get_whatsapp_templates(current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))):
+    """Get all WhatsApp templates (Super Admin only)"""
+    templates = await db.whatsapp_templates.find({}, {"_id": 0}).to_list(100)
+    
+    # Convert datetime strings to datetime objects
+    for template in templates:
+        if isinstance(template.get('created_at'), str):
+            template['created_at'] = datetime.fromisoformat(template['created_at'])
+        if isinstance(template.get('updated_at'), str):
+            template['updated_at'] = datetime.fromisoformat(template['updated_at'])
+    
+    return templates
+
+@api_router.post("/whatsapp/templates", response_model=WhatsAppTemplateResponse)
+async def create_whatsapp_template(
+    template_data: WhatsAppTemplateCreate,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Create or update a WhatsApp template for an event (Super Admin only)"""
+    
+    # Check if template already exists for this event
+    existing = await db.whatsapp_templates.find_one(
+        {"event_type": template_data.event_type.value},
+        {"_id": 0}
+    )
+    
+    if existing:
+        # Update existing template
+        update_data = {
+            "campaign_name": template_data.campaign_name,
+            "template_message": template_data.template_message,
+            "is_enabled": template_data.is_enabled,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.whatsapp_templates.update_one(
+            {"event_type": template_data.event_type.value},
+            {"$set": update_data}
+        )
+        
+        # Get updated template
+        template = await db.whatsapp_templates.find_one(
+            {"event_type": template_data.event_type.value},
+            {"_id": 0}
+        )
+    else:
+        # Create new template
+        template = WhatsAppTemplate(
+            event_type=template_data.event_type,
+            campaign_name=template_data.campaign_name,
+            template_message=template_data.template_message,
+            is_enabled=template_data.is_enabled
+        )
+        
+        template_doc = template.model_dump()
+        template_doc['created_at'] = template_doc['created_at'].isoformat()
+        template_doc['updated_at'] = template_doc['updated_at'].isoformat()
+        
+        await db.whatsapp_templates.insert_one(template_doc)
+    
+    # Convert datetime strings for response
+    if isinstance(template.get('created_at'), str):
+        template['created_at'] = datetime.fromisoformat(template['created_at'])
+    if isinstance(template.get('updated_at'), str):
+        template['updated_at'] = datetime.fromisoformat(template['updated_at'])
+    
+    return WhatsAppTemplateResponse(**template)
+
+@api_router.patch("/whatsapp/templates/{event_type}")
+async def update_whatsapp_template(
+    event_type: WhatsAppTemplateEvent,
+    update_data: WhatsAppTemplateUpdate,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Update a WhatsApp template (Super Admin only)"""
+    
+    template = await db.whatsapp_templates.find_one(
+        {"event_type": event_type.value},
+        {"_id": 0}
+    )
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    update_fields = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if update_data.campaign_name is not None:
+        update_fields['campaign_name'] = update_data.campaign_name
+    if update_data.template_message is not None:
+        update_fields['template_message'] = update_data.template_message
+    if update_data.is_enabled is not None:
+        update_fields['is_enabled'] = update_data.is_enabled
+    
+    await db.whatsapp_templates.update_one(
+        {"event_type": event_type.value},
+        {"$set": update_fields}
+    )
+    
+    return {"message": "Template updated successfully"}
+
+@api_router.get("/whatsapp/logs")
+async def get_whatsapp_logs(
+    order_id: Optional[str] = None,
+    limit: int = 50,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Get WhatsApp message logs (Super Admin only)"""
+    
+    query = {}
+    if order_id:
+        query['order_id'] = order_id
+    
+    logs = await db.whatsapp_logs.find(query, {"_id": 0}).sort("timestamp", -1).limit(limit).to_list(limit)
+    
+    # Convert datetime strings
+    for log in logs:
+        if isinstance(log.get('timestamp'), str):
+            log['timestamp'] = datetime.fromisoformat(log['timestamp'])
+    
+    return logs
+
 # ==================== INITIALIZE SUPER ADMIN ====================
 
 @app.on_event("startup")
