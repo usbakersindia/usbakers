@@ -83,6 +83,15 @@ const NewOrder = () => {
     }
   };
 
+  const fetchUsers = async () => {
+    try {
+      const response = await axios.get(`${API}/users`);
+      setUsers(response.data);
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+    }
+  };
+
   const handleImageUpload = async (e, type = 'primary') => {
     const file = e.target.files[0];
     if (!file) return;
