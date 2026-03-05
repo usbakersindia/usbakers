@@ -19,7 +19,7 @@ import PermissionManagement from './pages/PermissionManagement';
 import '@/App.css';
 
 const AppRoutes = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) {
     return (
@@ -29,11 +29,19 @@ const AppRoutes = () => {
     );
   }
 
+  // Get default route based on user role
+  const getDefaultRoute = () => {
+    if (!user) return '/login';
+    if (user.role === 'kitchen') return '/kitchen';
+    if (user.role === 'delivery') return '/delivery';
+    return '/dashboard';
+  };
+
   return (
     <Routes>
       <Route
         path="/login"
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
+        element={isAuthenticated ? <Navigate to={getDefaultRoute()} replace /> : <Login />}
       />
       <Route
         path="/dashboard"
@@ -149,7 +157,7 @@ const AppRoutes = () => {
       />
       <Route
         path="/"
-        element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />}
+        element={<Navigate to={isAuthenticated ? getDefaultRoute() : '/login'} replace />}
       />
     </Routes>
   );
