@@ -7,7 +7,15 @@ from datetime import datetime, timezone, timedelta
 import os
 import random
 import sys
-sys.path.append('/app/backend')
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Add backend directory to path (works in both dev and production)
+backend_dir = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(backend_dir))
+
+# Load environment variables from .env file
+load_dotenv(backend_dir / '.env')
 
 from models.schemas import UserRole, OrderStatus
 
