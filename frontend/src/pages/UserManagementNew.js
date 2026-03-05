@@ -36,7 +36,8 @@ const UserManagementNew = () => {
     name: '',
     phone: '',
     password: '',
-    outlet_id: null,
+    role: 'order_manager',  // Default role
+    outlet_id: '',
     permissions: [],
     incentive_percentage: 0
   });
@@ -121,7 +122,8 @@ const UserManagementNew = () => {
         name: '',
         phone: '',
         password: '',
-        outlet_id: null,
+        role: 'order_manager',
+        outlet_id: '',
         permissions: [],
         incentive_percentage: 0
       });
@@ -285,10 +287,30 @@ const UserManagementNew = () => {
                       </div>
 
                       <div className="space-y-2">
+                        <Label htmlFor="role">Role *</Label>
+                        <Select
+                          value={formData.role}
+                          onValueChange={(value) => setFormData({ ...formData, role: value })}
+                        >
+                          <SelectTrigger data-testid="user-role-select">
+                            <SelectValue placeholder="Select role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="super_admin">Super Admin</SelectItem>
+                            <SelectItem value="outlet_admin">Outlet Admin</SelectItem>
+                            <SelectItem value="order_manager">Order Manager</SelectItem>
+                            <SelectItem value="kitchen">Kitchen Staff</SelectItem>
+                            <SelectItem value="delivery">Delivery Staff</SelectItem>
+                            <SelectItem value="accounts">Accounts</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
                         <Label htmlFor="outlet">Assign to Outlet (Optional)</Label>
                         <Select
                           value={formData.outlet_id || 'none'}
-                          onValueChange={(value) => setFormData({ ...formData, outlet_id: value === 'none' ? null : value })}
+                          onValueChange={(value) => setFormData({ ...formData, outlet_id: value === 'none' ? '' : value })}
                         >
                           <SelectTrigger data-testid="user-outlet-select">
                             <SelectValue placeholder="Select outlet" />
