@@ -671,13 +671,24 @@ async def create_user(
         if not outlet:
             raise HTTPException(status_code=404, detail="Outlet not found")
     
+    # Auto-apply role permissions if no custom permissions provided
+    permissions = user_data.permissions
+    if not permissions:
+        # Check for role permission template
+        role_template = await db.role_permissions.find_one({"role": user_data.role.value}, {"_id": 0})
+        if role_template:
+            permissions = role_template.get("permissions", [])
+        else:
+            # Use default permissions for the role
+            permissions = get_default_role_permissions(user_data.role.value)
+    
     # Create user
     user = User(
         email=user_data.email,
         name=user_data.name,
         phone=user_data.phone,
         role=user_data.role,
-        permissions=user_data.permissions,
+        permissions=permissions,
         incentive_percentage=user_data.incentive_percentage,
         password_hash=get_password_hash(user_data.password),
         outlet_id=user_data.outlet_id,
@@ -2608,6 +2619,143 @@ async def create_super_admin():
         logger.info("✅ Super Admin created - Email: admin@usbakers.com, Password: admin123")
 
 # ==================== HEALTH CHECK ====================
+
+# ==================== PERMISSION MANAGEMENT ====================
+
+def get_default_role_permissions(role: str) -> List[str]:
+    """Get default permissions for a role"""
+    defaults = {
+        "super_admin": [
+            "can_create_order", "can_view_orders", "can_edit_orders", "can_delete_orders", "can_mark_ready",
+            "can_edit_customer_info", "can_edit_flavour", "can_edit_size", "can_edit_delivery_date",
+            "can_edit_delivery_time", "can_edit_total_amount", "can_edit_special_instructions",
+            "can_edit_cake_image", "can_edit_name_on_cake",
+            "can_record_payment", "can_view_payments", "can_refund",
+            "can_manage_outlets", "can_manage_zones", "can_manage_users", "can_view_reports", "can_manage_settings",
+            "can_assign_delivery", "can_view_delivery_orders", "can_mark_delivered"
+        ],
+        "outlet_admin": [
+            "can_create_order", "can_view_orders", "can_edit_orders",
+            "can_edit_customer_info", "can_edit_flavour", "can_edit_size",
+            "can_edit_delivery_date", "can_edit_delivery_time", "can_edit_special_instructions",
+            "can_edit_cake_image", "can_edit_name_on_cake",
+            "can_record_payment", "can_view_payments",
+            "can_view_reports", "can_assign_delivery"
+        ],
+        "order_manager": [
+            "can_create_order", "can_view_orders", "can_edit_orders",
+            "can_edit_customer_info", "can_edit_flavour", "can_edit_size",
+            "can_edit_delivery_date", "can_edit_delivery_time", "can_edit_special_instructions",
+            "can_view_payments"
+        ],
+        "kitchen": ["can_view_orders", "can_mark_ready"],
+        "delivery": ["can_view_delivery_orders", "can_mark_delivered"],
+        "accounts": [
+            "can_view_orders", "can_record_payment", "can_view_payments",
+            "can_refund", "can_view_reports"
+        ]
+    }
+    return defaults.get(role, [])
+
+@api_router.get("/permissions/available")
+async def get_available_permissions(current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))):
+    """Get all available permissions"""
+    return {
+        "permissions": AVAILABLE_PERMISSIONS,
+        "roles": [role.value for role in UserRole]
+    }
+
+@api_router.get("/permissions/roles")
+async def get_all_role_permissions(current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))):
+    """Get all role permission templates"""
+    templates = await db.role_permissions.find({}, {"_id": 0}).to_list(100)
+    
+    # If no templates, return defaults
+    if not templates:
+        templates = []
+        for role in UserRole:
+            templates.append({
+                "role": role.value,
+                "permissions": get_default_role_permissions(role.value),
+                "description": f"Default permissions for {role.value}",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_by": "system"
+            })
+    
+    return {"role_permissions": templates}
+
+@api_router.get("/permissions/roles/{role}")
+async def get_role_permissions(role: str, current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))):
+    """Get permissions for a specific role"""
+    template = await db.role_permissions.find_one({"role": role}, {"_id": 0})
+    
+    if not template:
+        template = {
+            "role": role,
+            "permissions": get_default_role_permissions(role),
+            "description": f"Default permissions for {role}"
+        }
+    
+    return template
+
+class UpdateRolePermissionsRequest(BaseModel):
+    role: str
+    permissions: List[str]
+
+@api_router.post("/permissions/roles")
+async def update_role_permissions(
+    request: UpdateRolePermissionsRequest,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Update permissions for a role"""
+    # Validate permissions
+    all_permissions = []
+    for category in AVAILABLE_PERMISSIONS.values():
+        all_permissions.extend(category.keys())
+    
+    invalid = [p for p in request.permissions if p not in all_permissions]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Invalid permissions: {', '.join(invalid)}")
+    
+    template = {
+        "role": request.role,
+        "permissions": request.permissions,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": current_user.id
+    }
+    
+    await db.role_permissions.update_one(
+        {"role": request.role},
+        {"$set": template},
+        upsert=True
+    )
+    
+    return {"message": f"Permissions updated for {request.role}", "template": template}
+
+@api_router.post("/permissions/apply-to-existing-users/{role}")
+async def apply_permissions_to_existing_users(
+    role: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Apply role permissions to all existing users with that role"""
+    template = await db.role_permissions.find_one({"role": role})
+    if not template:
+        template = {
+            "permissions": get_default_role_permissions(role)
+        }
+    
+    result = await db.users.update_many(
+        {"role": role},
+        {"$set": {"permissions": template["permissions"]}}
+    )
+    
+    return {
+        "message": f"Applied permissions to {result.modified_count} users",
+        "role": role,
+        "modified_count": result.modified_count
+    }
+
+
 
 @api_router.get("/health")
 async def health_check():

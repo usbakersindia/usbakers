@@ -15,6 +15,7 @@ import ManageOrders from './pages/ManageOrders';
 import KitchenDashboard from './pages/KitchenDashboard';
 import DeliveryDashboard from './pages/DeliveryDashboard';
 import Reports from './pages/Reports';
+import PermissionManagement from './pages/PermissionManagement';
 import '@/App.css';
 
 const AppRoutes = () => {
@@ -135,6 +136,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['super_admin']}>
             <Settings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/permissions"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin']}>
+            <PermissionManagement />
           </ProtectedRoute>
         }
       />
