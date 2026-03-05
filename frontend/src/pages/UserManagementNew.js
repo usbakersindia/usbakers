@@ -23,6 +23,11 @@ const UserManagementNew = () => {
   const [availablePermissions, setAvailablePermissions] = useState({});
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [editPermissions, setEditPermissions] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -132,6 +137,59 @@ const UserManagementNew = () => {
       fetchUsers();
     } catch (error) {
       console.error('Failed to toggle user status:', error);
+    }
+  };
+
+  const openPermissionsDialog = (user) => {
+    setSelectedUser(user);
+    setEditPermissions(user.permissions || []);
+    setPermissionsDialogOpen(true);
+  };
+
+  const openPasswordDialog = (user) => {
+    setSelectedUser(user);
+    setNewPassword('');
+    setPasswordDialogOpen(true);
+  };
+
+  const updateUserPermissions = async () => {
+    try {
+      await axios.patch(`${API}/users/${selectedUser.id}/permissions`, {
+        permissions: editPermissions
+      });
+      setSuccess('Permissions updated successfully!');
+      setPermissionsDialogOpen(false);
+      fetchUsers();
+    } catch (error) {
+      setError('Failed to update permissions');
+      console.error('Failed to update permissions:', error);
+    }
+  };
+
+  const handleEditPermissionToggle = (permission) => {
+    setEditPermissions(prev => 
+      prev.includes(permission) 
+        ? prev.filter(p => p !== permission)
+        : [...prev, permission]
+    );
+  };
+
+  const resetUserPassword = async () => {
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    
+    try {
+      await axios.patch(`${API}/users/${selectedUser.id}/password`, {
+        password: newPassword
+      });
+      setSuccess(`Password reset successfully for ${selectedUser.name}!`);
+      setPasswordDialogOpen(false);
+      setNewPassword('');
+    } catch (error) {
+      setError(error.response?.data?.detail || 'Failed to reset password');
+      console.error('Failed to reset password:', error);
     }
   };
 
@@ -384,14 +442,32 @@ const UserManagementNew = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => toggleUserActive(user.id)}
-                          data-testid={`toggle-user-${user.id}`}
-                        >
-                          {user.is_active ? 'Deactivate' : 'Activate'}
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => toggleUserActive(user.id)}
+                            data-testid={`toggle-user-${user.id}`}
+                          >
+                            {user.is_active ? 'Deactivate' : 'Activate'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openPermissionsDialog(user)}
+                            data-testid={`permissions-user-${user.id}`}
+                          >
+                            Permissions
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openPasswordDialog(user)}
+                            data-testid={`password-user-${user.id}`}
+                          >
+                            Reset Password
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -399,6 +475,88 @@ const UserManagementNew = () => {
             </Table>
           </CardContent>
         </Card>
+
+        {/* Permissions Dialog */}
+        {selectedUser && (
+          <Dialog open={permissionsDialogOpen} onOpenChange={setPermissionsDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Edit Permissions: {selectedUser.name}</DialogTitle>
+                <DialogDescription>
+                  Select permissions for this user. Click Save when done.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                {Object.entries(availablePermissions).map(([category, perms]) => (
+                  <Card key={category}>
+                    <CardHeader className="py-3">
+                      <CardTitle className="text-sm capitalize">{category.replace('_', ' ')}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 pt-0">
+                      {Object.entries(perms).map(([key, description]) => (
+                        <div key={key} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`edit-${key}`}
+                            checked={editPermissions.includes(key)}
+                            onCheckedChange={() => handleEditPermissionToggle(key)}
+                            data-testid={`permission-checkbox-${key}`}
+                          />
+                          <label htmlFor={`edit-${key}`} className="text-sm cursor-pointer">
+                            {description}
+                          </label>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                ))}
+                <Button 
+                  onClick={updateUserPermissions} 
+                  className="w-full"
+                  data-testid="save-permissions-button"
+                >
+                  Save Permissions
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Password Reset Dialog */}
+        {selectedUser && (
+          <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Reset Password: {selectedUser.name}</DialogTitle>
+                <DialogDescription>
+                  Enter a new password for this user (minimum 6 characters).
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div>
+                  <Label htmlFor="new-password">New Password</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    minLength={6}
+                    data-testid="new-password-input"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+                </div>
+                <Button 
+                  onClick={resetUserPassword} 
+                  className="w-full"
+                  disabled={newPassword.length < 6}
+                  data-testid="reset-password-button"
+                >
+                  Reset Password
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </LayoutWithSidebar>
   );
