@@ -13,6 +13,7 @@ import Customers from './pages/Customers';
 import WhatsAppTemplates from './pages/WhatsAppTemplates';
 import MSG91Settings from './pages/MSG91Settings';
 import ManageOrders from './pages/ManageOrders';
+import PetPoojaOrders from './pages/PetPoojaOrders';
 import '@/App.css';
 
 const AppRoutes = () => {
@@ -109,6 +110,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['super_admin']}>
             <MSG91Settings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/petpooja-orders"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
+            <PetPoojaOrders />
           </ProtectedRoute>
         }
       />

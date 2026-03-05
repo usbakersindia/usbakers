@@ -2,7 +2,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt } from 'lucide-react';
 import { useState } from 'react';
 
 const Sidebar = () => {
@@ -21,6 +21,7 @@ const Sidebar = () => {
         // Super Admin Menu
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'nav-dashboard' },
         { path: '/manage-orders', label: 'Manage Orders', icon: List, testId: 'nav-manage-orders' },
+        { path: '/petpooja-orders', label: 'PetPooja Orders', icon: Receipt, testId: 'nav-petpooja' },
         { path: '/customers', label: 'Customers', icon: Users, testId: 'nav-customers' },
         { path: '/outlets', label: 'Outlets', icon: Store, testId: 'nav-outlets' },
         { path: '/users', label: 'Users', icon: Users, testId: 'nav-users' },
@@ -35,6 +36,7 @@ const Sidebar = () => {
         { path: '/new-order', label: 'New Order', icon: ShoppingCart, testId: 'nav-new-order' },
         { path: '/hold-orders', label: 'Hold Orders', icon: Clock, testId: 'nav-hold-orders' },
         { path: '/manage-orders', label: 'Manage Orders', icon: List, testId: 'nav-manage-orders' },
+        { path: '/petpooja-orders', label: 'PetPooja Orders', icon: Receipt, testId: 'nav-petpooja' },
         { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
       ];
 

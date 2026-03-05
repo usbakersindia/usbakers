@@ -1226,8 +1226,17 @@ async def petpooja_callback(request_data: Dict[str, Any]):
         
         # Update order based on PetPooja status
         update_data = {
-            "updated_at": datetime.now(timezone.utc).isoformat()
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "petpooja_rest_id": rest_id,
+            "petpooja_status": int(status) if status else None,
+            "is_modified": is_modified
         }
+        
+        # Store rider info if provided
+        if rider_name:
+            update_data['rider_name'] = rider_name
+        if rider_phone:
+            update_data['rider_phone'] = rider_phone
         
         # Map PetPooja status to our system
         if status == "-1":
@@ -1302,6 +1311,28 @@ async def get_petpooja_webhook_url(current_user: User = Depends(require_role([Us
             "rider_name", "rider_phone_number", "is_modified"
         ]
     }
+
+@api_router.get("/petpooja/orders")
+async def get_petpooja_orders(
+    current_user: User = Depends(get_current_user)
+):
+    """Get all orders that came from PetPooja POS"""
+    query = {"petpooja_rest_id": {"$exists": True, "$ne": None}}
+    
+    orders = await db.orders.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    
+    # Convert datetime strings
+    for order in orders:
+        if isinstance(order.get('created_at'), str):
+            order['created_at'] = datetime.fromisoformat(order['created_at'])
+        if isinstance(order.get('updated_at'), str):
+            order['updated_at'] = datetime.fromisoformat(order['updated_at'])
+        if isinstance(order.get('ready_at'), str) and order.get('ready_at'):
+            order['ready_at'] = datetime.fromisoformat(order['ready_at'])
+        if isinstance(order.get('delivered_at'), str) and order.get('delivered_at'):
+            order['delivered_at'] = datetime.fromisoformat(order['delivered_at'])
+    
+    return orders
 
 # ==================== PAYMENT MANAGEMENT ====================
 
