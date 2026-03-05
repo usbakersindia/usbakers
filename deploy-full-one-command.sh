@@ -49,7 +49,7 @@ echo ""
 
 # Confirmation
 read -p "Deploy US Bakers CRM to this server? (y/n): " -n 1 -r
-echo
+echo ""
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     print_warning "Deployment cancelled"
     exit 0
