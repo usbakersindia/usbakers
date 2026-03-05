@@ -1039,6 +1039,107 @@ async def update_order_status(
     
     return {"message": f"Order status updated to {status.value}"}
 
+@api_router.post("/orders/{order_id}/transfer")
+async def transfer_order(
+    order_id: str,
+    new_outlet_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Transfer order to another outlet with all payment data"""
+    # Check if user has permission
+    if not any(perm in current_user.permissions for perm in ['all', 'can_edit_order', 'can_manage_outlets']):
+        raise HTTPException(status_code=403, detail="Not authorized to transfer orders")
+    
+    # Find order
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Check if new outlet exists
+    new_outlet = await db.outlets.find_one({"id": new_outlet_id}, {"_id": 0})
+    if not new_outlet:
+        raise HTTPException(status_code=404, detail="Target outlet not found")
+    
+    # Update order outlet
+    old_outlet_id = order.get('outlet_id')
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "outlet_id": new_outlet_id,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Log transfer
+    log = Log(
+        order_id=order_id,
+        action="order_transferred",
+        performed_by=current_user.id,
+        before_data={"outlet_id": old_outlet_id},
+        after_data={"outlet_id": new_outlet_id}
+    )
+    log_doc = log.model_dump()
+    log_doc['timestamp'] = log_doc['timestamp'].isoformat()
+    await db.logs.insert_one(log_doc)
+    
+    return {
+        "message": f"Order transferred to {new_outlet['name']}",
+        "old_outlet_id": old_outlet_id,
+        "new_outlet_id": new_outlet_id
+    }
+
+@api_router.post("/orders/{order_id}/cancel-delivery")
+async def cancel_delivery(
+    order_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Cancel delivery for an order and remove delivery charges"""
+    # Find order
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if not order.get('needs_delivery'):
+        raise HTTPException(status_code=400, detail="Order doesn't have delivery")
+    
+    # Calculate delivery charge to remove
+    delivery_charge = 0
+    if order.get('zone_id'):
+        zone = await db.zones.find_one({"id": order['zone_id']}, {"_id": 0})
+        if zone:
+            delivery_charge = zone.get('delivery_charge', 0)
+    
+    # Update order
+    new_total = order.get('total_amount', 0) - delivery_charge
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "needs_delivery": False,
+            "zone_id": "",
+            "delivery_address": "",
+            "total_amount": new_total,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Log cancellation
+    log = Log(
+        order_id=order_id,
+        action="delivery_cancelled",
+        performed_by=current_user.id,
+        before_data={"needs_delivery": True, "total_amount": order.get('total_amount')},
+        after_data={"needs_delivery": False, "total_amount": new_total}
+    )
+    log_doc = log.model_dump()
+    log_doc['timestamp'] = log_doc['timestamp'].isoformat()
+    await db.logs.insert_one(log_doc)
+    
+    return {
+        "message": "Delivery cancelled successfully",
+        "delivery_charge_removed": delivery_charge,
+        "new_total": new_total
+    }
+
 # ==================== PETPOOJA WEBHOOK ====================
 
 @api_router.post("/petpooja/callback")

@@ -40,6 +40,7 @@ const NewOrder = () => {
     delivery_address: '',
     delivery_city: '',
     zone_id: '',
+    custom_delivery_charge: 0,
     occasion: '',
     flavour: '',
     size_pounds: 1,
@@ -395,10 +396,23 @@ const NewOrder = () => {
                               {zone.name} - ₹{zone.delivery_charge}
                             </SelectItem>
                           ))}
+                          <SelectItem value="custom">Custom Delivery Charge</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
+                  {formData.zone_id === 'custom' && (
+                    <div>
+                      <Label>Custom Delivery Charge (₹)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="Enter custom delivery charge"
+                        onChange={(e) => setFormData({ ...formData, custom_delivery_charge: parseFloat(e.target.value) || 0 })}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">For areas not covered by zones</p>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

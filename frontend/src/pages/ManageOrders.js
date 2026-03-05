@@ -22,7 +22,9 @@ import {
   DollarSign,
   XCircle,
   Calendar,
-  Search
+  Search,
+  ArrowRightLeft,
+  Ban
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -72,12 +74,18 @@ const ManageOrders = () => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const [outlets, setOutlets] = useState([]);
   const [message, setMessage] = useState({ type: '', text: '' });
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [activeTab, setActiveTab] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [occasionFilter, setOccasionFilter] = useState('all');
+  const [flavourFilter, setFlavourFilter] = useState('all');
 
   // Payment form
   const [paymentForm, setPaymentForm] = useState({
@@ -87,11 +95,12 @@ const ManageOrders = () => {
 
   useEffect(() => {
     fetchOrders();
+    fetchOutlets();
   }, []);
 
   useEffect(() => {
     applyFilters();
-  }, [searchTerm, statusFilter, activeTab, orders]);
+  }, [searchTerm, statusFilter, activeTab, dateFrom, dateTo, occasionFilter, flavourFilter, orders]);
 
   const fetchOrders = async () => {
     try {
@@ -108,6 +117,17 @@ const ManageOrders = () => {
     }
   };
 
+  const fetchOutlets = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/outlets`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setOutlets(response.data);
+    } catch (error) {
+      console.error('Error fetching outlets:', error);
+    }
+  };
+
   const applyFilters = () => {
     let filtered = [...orders];
 
@@ -119,6 +139,24 @@ const ManageOrders = () => {
     // Status filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(order => order.status === statusFilter);
+    }
+
+    // Date range filter
+    if (dateFrom) {
+      filtered = filtered.filter(order => order.delivery_date >= dateFrom);
+    }
+    if (dateTo) {
+      filtered = filtered.filter(order => order.delivery_date <= dateTo);
+    }
+
+    // Occasion filter
+    if (occasionFilter !== 'all') {
+      filtered = filtered.filter(order => order.occasion === occasionFilter);
+    }
+
+    // Flavour filter
+    if (flavourFilter !== 'all') {
+      filtered = filtered.filter(order => order.flavour === flavourFilter);
     }
 
     // Search filter
@@ -182,6 +220,48 @@ const ManageOrders = () => {
     } catch (error) {
       console.error('Error recording payment:', error);
       setMessage({ type: 'error', text: 'Failed to record payment' });
+    }
+  };
+
+  const handleTransferOrder = (order) => {
+    setSelectedOrder(order);
+    setTransferDialogOpen(true);
+  };
+
+  const submitTransfer = async (newOutletId) => {
+    try {
+      await axios.post(
+        `${API_URL}/api/orders/${selectedOrder.id}/transfer?new_outlet_id=${newOutletId}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      setMessage({ type: 'success', text: 'Order transferred successfully!' });
+      setTransferDialogOpen(false);
+      fetchOrders();
+    } catch (error) {
+      console.error('Error transferring order:', error);
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to transfer order' });
+    }
+  };
+
+  const handleCancelDelivery = async (order) => {
+    if (!window.confirm(`Cancel delivery for order ${order.order_number}? Delivery charges will be removed.`)) {
+      return;
+    }
+
+    try {
+      await axios.post(
+        `${API_URL}/api/orders/${order.id}/cancel-delivery`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      setMessage({ type: 'success', text: 'Delivery cancelled and charges removed' });
+      fetchOrders();
+    } catch (error) {
+      console.error('Error cancelling delivery:', error);
+      setMessage({ type: 'error', text: error.response?.data?.detail || 'Failed to cancel delivery' });
     }
   };
 
@@ -297,7 +377,7 @@ const ManageOrders = () => {
         {/* Filters */}
         <Card>
           <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <Label htmlFor="search">Search</Label>
                 <div className="relative mt-1">
@@ -313,7 +393,29 @@ const ManageOrders = () => {
               </div>
               
               <div>
-                <Label htmlFor="status-filter">Filter by Status</Label>
+                <Label htmlFor="date-from">From Date</Label>
+                <Input
+                  id="date-from"
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="date-to">To Date</Label>
+                <Input
+                  id="date-to"
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="status-filter">Status</Label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="All Statuses" />
@@ -327,17 +429,55 @@ const ManageOrders = () => {
                 </Select>
               </div>
 
-              <div className="flex items-end">
+              <div>
+                <Label htmlFor="occasion-filter">Occasion</Label>
+                <Select value={occasionFilter} onValueChange={setOccasionFilter}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="All Occasions" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Occasions</SelectItem>
+                    <SelectItem value="birthday">Birthday</SelectItem>
+                    <SelectItem value="anniversary">Anniversary</SelectItem>
+                    <SelectItem value="wedding">Wedding</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="flavour-filter">Flavour</Label>
+                <Select value={flavourFilter} onValueChange={setFlavourFilter}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="All Flavours" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Flavours</SelectItem>
+                    <SelectItem value="chocolate">Chocolate</SelectItem>
+                    <SelectItem value="vanilla">Vanilla</SelectItem>
+                    <SelectItem value="strawberry">Strawberry</SelectItem>
+                    <SelectItem value="butterscotch">Butterscotch</SelectItem>
+                    <SelectItem value="red_velvet">Red Velvet</SelectItem>
+                    <SelectItem value="black_forest">Black Forest</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="md:col-span-2 flex items-end">
                 <Button
                   variant="outline"
                   onClick={() => {
                     setSearchTerm('');
                     setStatusFilter('all');
                     setActiveTab('all');
+                    setDateFrom('');
+                    setDateTo('');
+                    setOccasionFilter('all');
+                    setFlavourFilter('all');
                   }}
                   className="w-full"
                 >
-                  Clear Filters
+                  Clear All Filters
                 </Button>
               </div>
             </div>
@@ -393,7 +533,10 @@ const ManageOrders = () => {
                         </TableRow>
                       ) : (
                         filteredOrders.map((order) => (
-                          <TableRow key={order.id}>
+                          <TableRow 
+                            key={order.id}
+                            className={order.status === 'delivered' ? 'bg-green-50 hover:bg-green-100' : ''}
+                          >
                             <TableCell className="font-medium">
                               <div className="flex items-center space-x-2">
                                 <Package className="h-4 w-4 text-gray-400" />
@@ -463,6 +606,25 @@ const ManageOrders = () => {
                                     title="Add Payment"
                                   >
                                     <DollarSign className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleTransferOrder(order)}
+                                  title="Transfer to Another Outlet"
+                                >
+                                  <ArrowRightLeft className="h-4 w-4" />
+                                </Button>
+                                {order.needs_delivery && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleCancelDelivery(order)}
+                                    title="Cancel Delivery"
+                                    className="text-red-600"
+                                  >
+                                    <Ban className="h-4 w-4" />
                                   </Button>
                                 )}
                                 {STATUS_CONFIG[order.status]?.nextStatus && (() => {
@@ -620,6 +782,39 @@ const ManageOrders = () => {
               >
                 Record Payment
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Transfer Order Dialog */}
+        <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Transfer Order - {selectedOrder?.order_number}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Transfer this order to another outlet. All payment data will be moved with the order.
+              </p>
+              <div>
+                <Label htmlFor="transfer-outlet">Select Target Outlet *</Label>
+                <Select
+                  onValueChange={(value) => submitTransfer(value)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Choose outlet" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {outlets
+                      .filter(o => o.id !== selectedOrder?.outlet_id)
+                      .map((outlet) => (
+                        <SelectItem key={outlet.id} value={outlet.id}>
+                          {outlet.name} - {outlet.city}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
