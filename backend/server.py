@@ -752,6 +752,34 @@ async def update_user_permissions(
         "permissions": new_permissions
     }
 
+@api_router.patch("/users/{user_id}/password")
+async def reset_user_password(
+    user_id: str,
+    password_data: Dict[str, str],
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Reset user password (Super Admin only)"""
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    new_password = password_data.get('password', '')
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    
+    # Hash the new password
+    password_hash = get_password_hash(new_password)
+    
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"password_hash": password_hash}}
+    )
+    
+    return {
+        "message": "Password reset successfully",
+        "user_id": user_id
+    }
+
 # ==================== OUTLET MANAGEMENT (Super Admin) ====================
 
 @api_router.post("/outlets", response_model=OutletResponse)

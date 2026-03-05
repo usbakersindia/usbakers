@@ -21,7 +21,9 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
   const [availablePermissions, setAvailablePermissions] = useState({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -107,6 +109,12 @@ const UserManagement = () => {
     setPermissionsDialogOpen(true);
   };
 
+  const openPasswordDialog = (user) => {
+    setSelectedUser(user);
+    setNewPassword('');
+    setPasswordDialogOpen(true);
+  };
+
   const updateUserPermissions = async (permissions) => {
     try {
       await axios.patch(`${API}/users/${selectedUser.id}/permissions`, {
@@ -118,6 +126,25 @@ const UserManagement = () => {
     } catch (error) {
       setError('Failed to update permissions');
       console.error('Failed to update permissions:', error);
+    }
+  };
+
+  const resetUserPassword = async () => {
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    
+    try {
+      await axios.patch(`${API}/users/${selectedUser.id}/password`, {
+        password: newPassword
+      });
+      setSuccess(`Password reset successfully for ${selectedUser.name}!`);
+      setPasswordDialogOpen(false);
+      setNewPassword('');
+    } catch (error) {
+      setError(error.response?.data?.detail || 'Failed to reset password');
+      console.error('Failed to reset password:', error);
     }
   };
 
@@ -344,6 +371,14 @@ const UserManagement = () => {
                           >
                             Permissions
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openPasswordDialog(user)}
+                            data-testid={`password-user-${user.id}`}
+                          >
+                            Reset Password
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -357,7 +392,7 @@ const UserManagement = () => {
         {/* Permissions Dialog */}
         {selectedUser && (
           <Dialog open={permissionsDialogOpen} onOpenChange={setPermissionsDialogOpen}>
-            <DialogContent className=\"max-w-2xl max-h-[80vh] overflow-y-auto\">
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Edit Permissions: {selectedUser.name}</DialogTitle>
                 <DialogDescription>
@@ -369,6 +404,41 @@ const UserManagement = () => {
                 availablePermissions={availablePermissions}
                 onSave={updateUserPermissions}
               />
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Password Reset Dialog */}
+        {selectedUser && (
+          <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Reset Password: {selectedUser.name}</DialogTitle>
+                <DialogDescription>
+                  Enter a new password for this user (minimum 6 characters).
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div>
+                  <Label htmlFor="new-password">New Password</Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    minLength={6}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
+                </div>
+                <Button 
+                  onClick={resetUserPassword} 
+                  className="w-full"
+                  disabled={newPassword.length < 6}
+                >
+                  Reset Password
+                </Button>
+              </div>
             </DialogContent>
           </Dialog>
         )}
