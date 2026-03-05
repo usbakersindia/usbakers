@@ -229,7 +229,7 @@ print_success "Application cloned"
 print_info "Step 9/13: Setting up backend..."
 
 # Create virtual environment and install dependencies
-su - $APP_USER -c "cd $APP_DIR/backend && python3.11 -m venv venv && source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt"
+su - $APP_USER -c "cd $APP_DIR/backend && python3.11 -m venv venv && source venv/bin/activate && pip install --upgrade pip && pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ && pip install -r requirements.txt"
 
 # Create .env file
 cat > $APP_DIR/backend/.env << EOF
