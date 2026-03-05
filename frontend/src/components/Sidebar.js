@@ -2,7 +2,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Clock, Store, Users, MapPin, Settings, LogOut, Menu, X, MessageSquare, List, Receipt, Truck } from 'lucide-react';
 import { useState } from 'react';
 
 const Sidebar = () => {
@@ -29,11 +29,18 @@ const Sidebar = () => {
         { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
       ]
     : [
-        // Outlet/User Menu - Check if user is Kitchen role
+        // Outlet/User Menu - Check if user is Kitchen or Delivery role
         ...(user?.role === 'kitchen' 
           ? [
               { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'nav-dashboard' },
               { path: '/kitchen', label: 'Kitchen Orders', icon: ShoppingCart, testId: 'nav-kitchen' },
+              { path: '/reports', label: 'Reports', icon: Receipt, testId: 'nav-reports' },
+              { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
+            ]
+          : user?.role === 'delivery'
+          ? [
+              { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'nav-dashboard' },
+              { path: '/delivery', label: 'Delivery Orders', icon: Truck, testId: 'nav-delivery' },
               { path: '/reports', label: 'Reports', icon: Receipt, testId: 'nav-reports' },
               { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
             ]

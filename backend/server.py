@@ -14,6 +14,7 @@ import os
 import logging
 import uuid
 import requests
+import random
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).parent
@@ -297,6 +298,7 @@ class Order(BaseModel):
     reached_at: Optional[datetime] = None
     delivered_at: Optional[datetime] = None
     delivery_code: Optional[str] = None
+    delivery_otp: Optional[str] = None  # 6-digit OTP for delivery confirmation
     
     # WhatsApp
     whatsapp_alerts: bool = True
@@ -961,7 +963,8 @@ async def create_order(
         created_by=current_user.id,
         order_taken_by=current_user.id,
         total_amount=order_data.total_amount,
-        is_hold=True  # Always starts in hold
+        is_hold=True,  # Always starts in hold
+        delivery_otp=str(random.randint(100000, 999999)) if order_data.needs_delivery else None  # Generate 6-digit OTP
     )
     
     doc = order.model_dump()
@@ -1500,6 +1503,105 @@ async def get_delivery_report(
         },
         "orders": orders
     }
+
+# ==================== DELIVERY ENDPOINTS ====================
+
+@api_router.get("/delivery/orders")
+async def get_delivery_orders(
+    current_user: User = Depends(get_current_user)
+):
+    """Get all orders assigned for delivery"""
+    query = {
+        "needs_delivery": True,
+        "is_deleted": False,
+        "status": {"$in": [OrderStatus.READY.value, OrderStatus.PICKED_UP.value, OrderStatus.REACHED.value]}
+    }
+    
+    # If user is delivery staff, show only their outlet
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
+        query['outlet_id'] = current_user.outlet_id
+    
+    orders = await db.orders.find(query, {"_id": 0}).sort("delivery_date", 1).to_list(1000)
+    
+    return orders
+
+@api_router.get("/delivery/summary")
+async def get_delivery_summary(
+    current_user: User = Depends(get_current_user)
+):
+    """Get delivery dashboard summary"""
+    query = {"needs_delivery": True, "is_deleted": False}
+    
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
+        query['outlet_id'] = current_user.outlet_id
+    
+    all_orders = await db.orders.find(query, {"_id": 0}).to_list(1000)
+    
+    ready = sum(1 for o in all_orders if o.get('status') == OrderStatus.READY.value)
+    picked_up = sum(1 for o in all_orders if o.get('status') == OrderStatus.PICKED_UP.value)
+    reached = sum(1 for o in all_orders if o.get('status') == OrderStatus.REACHED.value)
+    
+    # Delivered today
+    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    delivered_today = sum(1 for o in all_orders if o.get('status') == OrderStatus.DELIVERED.value and o.get('delivery_date') == today)
+    
+    return {
+        "ready": ready,
+        "picked_up": picked_up,
+        "reached": reached,
+        "delivered_today": delivered_today,
+        "total_active": ready + picked_up + reached
+    }
+
+@api_router.post("/delivery/verify-otp")
+async def verify_delivery_otp(
+    verification_data: Dict[str, str],
+    current_user: User = Depends(get_current_user)
+):
+    """Verify OTP and mark order as delivered"""
+    order_id = verification_data.get('order_id')
+    otp = verification_data.get('otp')
+    
+    if not order_id or not otp:
+        raise HTTPException(status_code=400, detail="Order ID and OTP required")
+    
+    # Get order
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Verify OTP
+    if order.get('delivery_otp') != otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+    
+    # Update order to delivered
+    await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {
+            "status": OrderStatus.DELIVERED.value,
+            "delivered_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Send WhatsApp notification
+    try:
+        await send_msg91_whatsapp(order_id, WhatsAppTemplateEvent.DELIVERED)
+    except Exception as e:
+        logger.error(f"WhatsApp notification failed: {str(e)}")
+    
+    # Log delivery
+    log = Log(
+        order_id=order_id,
+        action="order_delivered",
+        performed_by=current_user.id,
+        after_data={"delivered_at": datetime.now(timezone.utc).isoformat(), "otp_verified": True}
+    )
+    log_doc = log.model_dump()
+    log_doc['timestamp'] = log_doc['timestamp'].isoformat()
+    await db.logs.insert_one(log_doc)
+    
+    return {"message": "Order delivered successfully", "order_id": order_id}
 
 # ==================== PETPOOJA WEBHOOK ====================
 

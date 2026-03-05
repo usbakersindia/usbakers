@@ -13,6 +13,7 @@ import Customers from './pages/Customers';
 import MSG91Settings from './pages/MSG91Settings';
 import ManageOrders from './pages/ManageOrders';
 import KitchenDashboard from './pages/KitchenDashboard';
+import DeliveryDashboard from './pages/DeliveryDashboard';
 import Reports from './pages/Reports';
 import '@/App.css';
 
@@ -110,6 +111,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute allowedRoles={['super_admin', 'kitchen']}>
             <KitchenDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/delivery"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'delivery']}>
+            <DeliveryDashboard />
           </ProtectedRoute>
         }
       />
