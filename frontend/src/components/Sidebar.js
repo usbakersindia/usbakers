@@ -20,24 +20,32 @@ const Sidebar = () => {
     ? [
         // Super Admin Menu
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'nav-dashboard' },
-        { path: '/manage-orders', label: 'Manage Orders', icon: List, testId: 'nav-manage-orders' },
-        { path: '/petpooja-orders', label: 'PetPooja Orders', icon: Receipt, testId: 'nav-petpooja' },
         { path: '/customers', label: 'Customers', icon: Users, testId: 'nav-customers' },
         { path: '/outlets', label: 'Outlets', icon: Store, testId: 'nav-outlets' },
         { path: '/users', label: 'Users', icon: Users, testId: 'nav-users' },
         { path: '/zones', label: 'Zones', icon: MapPin, testId: 'nav-zones' },
-        { path: '/whatsapp-templates', label: 'WhatsApp (AiSensy)', icon: MessageSquare, testId: 'nav-whatsapp' },
-        { path: '/msg91-settings', label: 'WhatsApp (MSG91)', icon: MessageSquare, testId: 'nav-msg91' },
+        { path: '/reports', label: 'Reports', icon: Receipt, testId: 'nav-reports' },
+        { path: '/msg91-settings', label: 'WhatsApp Settings', icon: MessageSquare, testId: 'nav-msg91' },
         { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
       ]
     : [
-        // Outlet/User Menu
-        { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'nav-dashboard' },
-        { path: '/new-order', label: 'New Order', icon: ShoppingCart, testId: 'nav-new-order' },
-        { path: '/hold-orders', label: 'Hold Orders', icon: Clock, testId: 'nav-hold-orders' },
-        { path: '/manage-orders', label: 'Manage Orders', icon: List, testId: 'nav-manage-orders' },
-        { path: '/petpooja-orders', label: 'PetPooja Orders', icon: Receipt, testId: 'nav-petpooja' },
-        { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
+        // Outlet/User Menu - Check if user is Kitchen role
+        ...(user?.role === 'kitchen' 
+          ? [
+              { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'nav-dashboard' },
+              { path: '/kitchen', label: 'Kitchen Orders', icon: ShoppingCart, testId: 'nav-kitchen' },
+              { path: '/reports', label: 'Reports', icon: Receipt, testId: 'nav-reports' },
+              { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
+            ]
+          : [
+              { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'nav-dashboard' },
+              { path: '/new-order', label: 'New Order', icon: ShoppingCart, testId: 'nav-new-order' },
+              { path: '/hold-orders', label: 'Hold Orders', icon: Clock, testId: 'nav-hold-orders' },
+              { path: '/manage-orders', label: 'Manage Orders', icon: List, testId: 'nav-manage-orders' },
+              { path: '/reports', label: 'Reports', icon: Receipt, testId: 'nav-reports' },
+              { path: '/settings', label: 'Settings', icon: Settings, testId: 'nav-settings' }
+            ]
+        )
       ];
 
   return (

@@ -10,10 +10,10 @@ import Settings from './pages/Settings';
 import NewOrder from './pages/NewOrder';
 import HoldOrders from './pages/HoldOrders';
 import Customers from './pages/Customers';
-import WhatsAppTemplates from './pages/WhatsAppTemplates';
 import MSG91Settings from './pages/MSG91Settings';
 import ManageOrders from './pages/ManageOrders';
-import PetPoojaOrders from './pages/PetPoojaOrders';
+import KitchenDashboard from './pages/KitchenDashboard';
+import Reports from './pages/Reports';
 import '@/App.css';
 
 const AppRoutes = () => {
@@ -98,14 +98,6 @@ const AppRoutes = () => {
         }
       />
       <Route
-        path="/whatsapp-templates"
-        element={
-          <ProtectedRoute allowedRoles={['super_admin']}>
-            <WhatsAppTemplates />
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/msg91-settings"
         element={
           <ProtectedRoute allowedRoles={['super_admin']}>
@@ -114,10 +106,18 @@ const AppRoutes = () => {
         }
       />
       <Route
-        path="/petpooja-orders"
+        path="/kitchen"
         element={
-          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
-            <PetPoojaOrders />
+          <ProtectedRoute allowedRoles={['super_admin', 'kitchen']}>
+            <KitchenDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'kitchen', 'order_manager']}>
+            <Reports />
           </ProtectedRoute>
         }
       />

@@ -147,7 +147,13 @@ const NewOrder = () => {
 
     try {
       const response = await axios.post(`${API}/orders`, formData);
-      setSuccess(`Order created successfully! Order #${response.data.order_number}`);
+      const createdOrder = response.data;
+      
+      setSuccess(`Order created! ID: ${createdOrder.order_number} - Status: PENDING (awaiting payment sync from PetPooja)`);
+      
+      // Show order ID prominently
+      alert(`✅ Order Created Successfully!\n\nOrder ID: ${createdOrder.order_number}\n\nStatus: PENDING\n\nIMPORTANT: Add this Order ID in PetPooja "Comment" field to sync payment automatically.`);
+      
       setTimeout(() => navigate('/hold-orders'), 2000);
     } catch (error) {
       setError(error.response?.data?.detail || 'Failed to create order');

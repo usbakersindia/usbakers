@@ -20,6 +20,9 @@ const UserManagement = () => {
   const [outlets, setOutlets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [availablePermissions, setAvailablePermissions] = useState({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -35,6 +38,7 @@ const UserManagement = () => {
   useEffect(() => {
     fetchUsers();
     fetchOutlets();
+    fetchAvailablePermissions();
   }, []);
 
   const fetchUsers = async () => {
@@ -54,6 +58,15 @@ const UserManagement = () => {
       setOutlets(response.data);
     } catch (error) {
       console.error('Failed to fetch outlets:', error);
+    }
+  };
+
+  const fetchAvailablePermissions = async () => {
+    try {
+      const response = await axios.get(`${API}/permissions/available`);
+      setAvailablePermissions(response.data);
+    } catch (error) {
+      console.error('Failed to fetch permissions:', error);
     }
   };
 
@@ -86,6 +99,25 @@ const UserManagement = () => {
       fetchUsers();
     } catch (error) {
       console.error('Failed to toggle user status:', error);
+    }
+  };
+
+  const openPermissionsDialog = (user) => {
+    setSelectedUser(user);
+    setPermissionsDialogOpen(true);
+  };
+
+  const updateUserPermissions = async (permissions) => {
+    try {
+      await axios.patch(`${API}/users/${selectedUser.id}/permissions`, {
+        permissions: permissions
+      });
+      setSuccess('Permissions updated successfully!');
+      setPermissionsDialogOpen(false);
+      fetchUsers();
+    } catch (error) {
+      setError('Failed to update permissions');
+      console.error('Failed to update permissions:', error);
     }
   };
 
@@ -295,14 +327,24 @@ const UserManagement = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => toggleUserActive(user.id)}
-                          data-testid={`toggle-user-${user.id}`}
-                        >
-                          {user.is_active ? 'Deactivate' : 'Activate'}
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => toggleUserActive(user.id)}
+                            data-testid={`toggle-user-${user.id}`}
+                          >
+                            {user.is_active ? 'Deactivate' : 'Activate'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openPermissionsDialog(user)}
+                            data-testid={`permissions-user-${user.id}`}
+                          >
+                            Permissions
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -311,8 +353,71 @@ const UserManagement = () => {
             </Table>
           </CardContent>
         </Card>
+
+        {/* Permissions Dialog */}
+        {selectedUser && (
+          <Dialog open={permissionsDialogOpen} onOpenChange={setPermissionsDialogOpen}>
+            <DialogContent className=\"max-w-2xl max-h-[80vh] overflow-y-auto\">
+              <DialogHeader>
+                <DialogTitle>Edit Permissions: {selectedUser.name}</DialogTitle>
+                <DialogDescription>
+                  Select permissions for this user. Changes will be saved immediately.
+                </DialogDescription>
+              </DialogHeader>
+              <PermissionsEditor 
+                user={selectedUser}
+                availablePermissions={availablePermissions}
+                onSave={updateUserPermissions}
+              />
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </LayoutWithSidebar>
+  );
+};
+
+// Permissions Editor Component
+const PermissionsEditor = ({ user, availablePermissions, onSave }) => {
+  const [selectedPermissions, setSelectedPermissions] = useState(user.permissions || []);
+
+  const togglePermission = (permission) => {
+    setSelectedPermissions(prev => 
+      prev.includes(permission) 
+        ? prev.filter(p => p !== permission)
+        : [...prev, permission]
+    );
+  };
+
+  return (
+    <div className=\"space-y-4\">
+      {Object.entries(availablePermissions).map(([category, perms]) => (
+        <Card key={category}>
+          <CardHeader>
+            <CardTitle className=\"text-sm capitalize\">{category.replace('_', ' ')}</CardTitle>
+          </CardHeader>
+          <CardContent className=\"space-y-2\">
+            {Object.entries(perms).map(([key, description]) => (
+              <div key={key} className=\"flex items-center space-x-2\">
+                <input 
+                  type=\"checkbox\" 
+                  id={key}
+                  checked={selectedPermissions.includes(key)}
+                  onChange={() => togglePermission(key)}
+                  className=\"h-4 w-4\"
+                />
+                <label htmlFor={key} className=\"text-sm cursor-pointer\">
+                  {description}
+                </label>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ))}
+      <Button onClick={() => onSave(selectedPermissions)} className=\"w-full\">
+        Save Permissions
+      </Button>
+    </div>
   );
 };
 

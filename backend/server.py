@@ -36,9 +36,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
-# AiSensy WhatsApp Configuration
-AISENSY_API_KEY = os.environ.get("AISENSY_API_KEY", "")
-AISENSY_API_ENDPOINT = os.environ.get("AISENSY_API_ENDPOINT", "https://backend.aisensy.com/campaign/t1/api/v2")
+# MSG91 WhatsApp Configuration (AiSensy removed - using MSG91 only)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -54,6 +52,8 @@ class UserRole(str, Enum):
     ACCOUNTS = "accounts"
 
 class OrderStatus(str, Enum):
+    PENDING = "pending"
+    ON_HOLD = "on_hold"
     CONFIRMED = "confirmed"
     READY = "ready"
     PICKED_UP = "picked_up"
@@ -268,7 +268,7 @@ class Order(BaseModel):
     delivery_time: str
     
     # Status & Workflow
-    status: OrderStatus = OrderStatus.CONFIRMED
+    status: OrderStatus = OrderStatus.PENDING
     outlet_id: str
     created_by: str  # User ID
     order_taken_by: str  # For incentive calculation
@@ -277,12 +277,14 @@ class Order(BaseModel):
     total_amount: float = 0.0
     paid_amount: float = 0.0
     pending_amount: float = 0.0
+    payment_synced_from_petpooja: bool = False
     
     # PetPooja Integration
     petpooja_bill_numbers: List[str] = []
+    petpooja_comment: Optional[str] = None  # Our Order ID stored in PetPooja
     
     # Flags
-    is_hold: bool = True  # Starts in hold
+    is_hold: bool = False  # Not on hold by default
     is_ready: bool = False
     ready_at: Optional[datetime] = None
     is_deleted: bool = False
@@ -726,6 +728,30 @@ async def toggle_user_active(
     
     return {"message": f"User {'activated' if new_status else 'deactivated'} successfully"}
 
+@api_router.patch("/users/{user_id}/permissions")
+async def update_user_permissions(
+    user_id: str,
+    permissions_data: Dict[str, List[str]],
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Update user permissions (Super Admin only)"""
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    new_permissions = permissions_data.get('permissions', [])
+    
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"permissions": new_permissions}}
+    )
+    
+    return {
+        "message": "Permissions updated successfully",
+        "user_id": user_id,
+        "permissions": new_permissions
+    }
+
 # ==================== OUTLET MANAGEMENT (Super Admin) ====================
 
 @api_router.post("/outlets", response_model=OutletResponse)
@@ -1087,10 +1113,8 @@ async def update_order_status(
         }
         
         if status in event_map:
-            # Try MSG91 first, fallback to AiSensy
-            msg91_sent = await send_msg91_whatsapp(order_id, event_map[status])
-            if not msg91_sent:
-                await send_whatsapp_notification(order_id, event_map[status])
+            # Send via MSG91 only
+            await send_msg91_whatsapp(order_id, event_map[status])
     except Exception as e:
         logger.error(f"WhatsApp notification failed for order {order_id}: {str(e)}")
     
@@ -1197,6 +1221,258 @@ async def cancel_delivery(
         "new_total": new_total
     }
 
+# ==================== FACTORY/KITCHEN ENDPOINTS ====================
+
+@api_router.get("/kitchen/orders")
+async def get_kitchen_orders(
+    date: Optional[str] = None,
+    outlet_id: Optional[str] = None,
+    status: Optional[str] = None,
+    size: Optional[str] = None,
+    flavour: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get orders for factory/kitchen with advanced filters"""
+    query = {}
+    
+    # Default: Show only confirmed and ready orders
+    if not status:
+        query['status'] = {"$in": [OrderStatus.CONFIRMED.value, OrderStatus.READY.value]}
+    else:
+        query['status'] = status
+    
+    # Date filter (default: today)
+    if not date:
+        today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        query['delivery_date'] = today
+    else:
+        query['delivery_date'] = date
+    
+    # Outlet filter
+    if outlet_id:
+        query['outlet_id'] = outlet_id
+    
+    # Additional filters
+    if size:
+        query['size_pounds'] = float(size)
+    if flavour:
+        query['flavour'] = flavour
+    
+    # Exclude deleted and on-hold orders
+    query['is_deleted'] = False
+    query['is_hold'] = False
+    
+    orders = await db.orders.find(query, {"_id": 0}).sort("delivery_time", 1).to_list(1000)
+    
+    return orders
+
+@api_router.post("/kitchen/orders/mark-ready")
+async def mark_orders_ready(
+    order_ids: List[str],
+    current_user: User = Depends(get_current_user)
+):
+    """Mark multiple orders as ready (bulk operation)"""
+    if not order_ids:
+        raise HTTPException(status_code=400, detail="No order IDs provided")
+    
+    updated_count = 0
+    for order_id in order_ids:
+        result = await db.orders.update_one(
+            {"id": order_id, "status": OrderStatus.CONFIRMED.value},
+            {"$set": {
+                "status": OrderStatus.READY.value,
+                "is_ready": True,
+                "ready_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        if result.modified_count > 0:
+            updated_count += 1
+            
+            # Send WhatsApp notification
+            try:
+                await send_msg91_whatsapp(order_id, WhatsAppTemplateEvent.ORDER_READY)
+            except Exception as e:
+                logger.error(f"WhatsApp notification failed: {str(e)}")
+    
+    return {
+        "message": f"{updated_count} orders marked as ready",
+        "total_requested": len(order_ids),
+        "updated": updated_count
+    }
+
+@api_router.get("/kitchen/orders/summary")
+async def get_kitchen_summary(
+    date: Optional[str] = None,
+    outlet_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get summary of orders for kitchen dashboard"""
+    query = {"is_deleted": False, "is_hold": False}
+    
+    # Date filter (default: today)
+    if not date:
+        today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        query['delivery_date'] = today
+    else:
+        query['delivery_date'] = date
+    
+    # Outlet filter
+    if outlet_id:
+        query['outlet_id'] = outlet_id
+    
+    all_orders = await db.orders.find(query, {"_id": 0}).to_list(1000)
+    
+    confirmed_count = sum(1 for o in all_orders if o.get('status') == OrderStatus.CONFIRMED.value)
+    ready_count = sum(1 for o in all_orders if o.get('status') == OrderStatus.READY.value)
+    picked_up_count = sum(1 for o in all_orders if o.get('status') == OrderStatus.PICKED_UP.value)
+    delivered_count = sum(1 for o in all_orders if o.get('status') == OrderStatus.DELIVERED.value)
+    
+    return {
+        "total_orders": len(all_orders),
+        "confirmed": confirmed_count,
+        "ready": ready_count,
+        "picked_up": picked_up_count,
+        "delivered": delivered_count,
+        "pending_production": confirmed_count  # Orders needing to be made
+    }
+
+# ==================== REPORTS ENDPOINTS ====================
+
+@api_router.get("/reports/orders")
+async def get_order_report(
+    start_date: str,
+    end_date: str,
+    outlet_id: Optional[str] = None,
+    status: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get order report for a date range"""
+    query = {
+        "delivery_date": {"$gte": start_date, "$lte": end_date},
+        "is_deleted": False
+    }
+    
+    # Outlet filter (outlet users can only see their own)
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
+        query['outlet_id'] = current_user.outlet_id
+    elif outlet_id:
+        query['outlet_id'] = outlet_id
+    
+    if status:
+        query['status'] = status
+    
+    orders = await db.orders.find(query, {"_id": 0}).sort("delivery_date", -1).to_list(5000)
+    
+    # Calculate summary
+    total_orders = len(orders)
+    total_amount = sum(o.get('total_amount', 0) for o in orders)
+    total_paid = sum(o.get('paid_amount', 0) for o in orders)
+    total_pending = sum(o.get('pending_amount', 0) for o in orders)
+    
+    status_breakdown = {}
+    for order in orders:
+        status_val = order.get('status', 'unknown')
+        status_breakdown[status_val] = status_breakdown.get(status_val, 0) + 1
+    
+    return {
+        "orders": orders,
+        "summary": {
+            "total_orders": total_orders,
+            "total_amount": total_amount,
+            "total_paid": total_paid,
+            "total_pending": total_pending,
+            "status_breakdown": status_breakdown
+        }
+    }
+
+@api_router.get("/reports/payments")
+async def get_payment_report(
+    start_date: str,
+    end_date: str,
+    outlet_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get payment collection report"""
+    # Convert dates to datetime for comparison
+    start_dt = datetime.fromisoformat(start_date)
+    end_dt = datetime.fromisoformat(end_date)
+    
+    query = {}
+    
+    # Outlet filter
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
+        query['outlet_id'] = current_user.outlet_id
+    elif outlet_id:
+        query['outlet_id'] = outlet_id
+    
+    # Get all payments in date range
+    payments = await db.payments.find(query, {"_id": 0}).to_list(10000)
+    
+    # Filter by date
+    filtered_payments = [
+        p for p in payments 
+        if start_dt <= datetime.fromisoformat(p['paid_at']) <= end_dt
+    ]
+    
+    # Calculate totals by payment method
+    method_totals = {}
+    for payment in filtered_payments:
+        method = payment.get('payment_method', 'unknown')
+        amount = payment.get('amount', 0)
+        method_totals[method] = method_totals.get(method, 0) + amount
+    
+    total_collected = sum(p.get('amount', 0) for p in filtered_payments)
+    
+    return {
+        "payments": filtered_payments,
+        "summary": {
+            "total_payments": len(filtered_payments),
+            "total_collected": total_collected,
+            "by_method": method_totals
+        }
+    }
+
+@api_router.get("/reports/delivery")
+async def get_delivery_report(
+    start_date: str,
+    end_date: str,
+    outlet_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get delivery performance report"""
+    query = {
+        "delivery_date": {"$gte": start_date, "$lte": end_date},
+        "needs_delivery": True,
+        "is_deleted": False
+    }
+    
+    # Outlet filter
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
+        query['outlet_id'] = current_user.outlet_id
+    elif outlet_id:
+        query['outlet_id'] = outlet_id
+    
+    orders = await db.orders.find(query, {"_id": 0}).to_list(5000)
+    
+    delivered = sum(1 for o in orders if o.get('status') == OrderStatus.DELIVERED.value)
+    cancelled = sum(1 for o in orders if o.get('status') == OrderStatus.CANCELLED.value)
+    in_transit = sum(1 for o in orders if o.get('status') in [OrderStatus.PICKED_UP.value, OrderStatus.REACHED.value])
+    pending = sum(1 for o in orders if o.get('status') in [OrderStatus.CONFIRMED.value, OrderStatus.READY.value])
+    
+    return {
+        "summary": {
+            "total_delivery_orders": len(orders),
+            "delivered": delivered,
+            "cancelled": cancelled,
+            "in_transit": in_transit,
+            "pending_delivery": pending,
+            "delivery_rate": round((delivered / len(orders) * 100) if orders else 0, 2)
+        },
+        "orders": orders
+    }
+
 # ==================== PETPOOJA WEBHOOK ====================
 
 @api_router.post("/petpooja/callback")
@@ -1294,18 +1570,129 @@ async def petpooja_callback(request_data: Dict[str, Any]):
         logger.error(f"PetPooja callback error: {str(e)}")
         return {"success": False, "message": str(e)}
 
+@api_router.post("/petpooja/payment-webhook")
+async def petpooja_payment_webhook(request_data: Dict[str, Any]):
+    """
+    Webhook endpoint for PetPooja to send bill/payment data
+    This syncs payment from PetPooja POS to our CRM
+    Expected to receive: bill_number, amount, comment (containing our Order ID)
+    """
+    try:
+        logger.info(f"PetPooja payment webhook received: {request_data}")
+        
+        bill_number = request_data.get('bill_number') or request_data.get('billNo')
+        amount = float(request_data.get('amount', 0) or request_data.get('totalAmount', 0))
+        comment = request_data.get('comment') or request_data.get('remarks', '')
+        payment_method = request_data.get('payment_method', 'cash')
+        
+        if not comment:
+            logger.error("No comment/order ID found in PetPooja webhook")
+            return {"success": False, "message": "Order ID not found in comment"}
+        
+        # Extract our Order ID from comment (format: USB-20250305-001)
+        order_id = comment.strip()
+        
+        # Find order in our system by order_number or id
+        order = await db.orders.find_one({
+            "$or": [
+                {"order_number": order_id},
+                {"id": order_id}
+            ]
+        }, {"_id": 0})
+        
+        if not order:
+            logger.error(f"Order not found for ID: {order_id}")
+            return {"success": False, "message": f"Order {order_id} not found"}
+        
+        # Check if order is on hold
+        if order.get('is_hold', False):
+            logger.info(f"Order {order_id} is on hold, not syncing payment")
+            return {"success": False, "message": "Order is on hold"}
+        
+        # Record payment
+        payment = Payment(
+            order_id=order['id'],
+            amount=amount,
+            payment_method=payment_method,
+            petpooja_bill_number=bill_number,
+            recorded_by="system"  # Auto-recorded from PetPooja
+        )
+        
+        payment_doc = payment.model_dump()
+        payment_doc['paid_at'] = payment_doc['paid_at'].isoformat()
+        await db.payments.insert_one(payment_doc)
+        
+        # Update order
+        new_paid_amount = order.get('paid_amount', 0) + amount
+        new_pending = order.get('total_amount', 0) - new_paid_amount
+        
+        bill_numbers = order.get('petpooja_bill_numbers', [])
+        if bill_number and bill_number not in bill_numbers:
+            bill_numbers.append(bill_number)
+        
+        update_data = {
+            "paid_amount": new_paid_amount,
+            "pending_amount": new_pending,
+            "payment_synced_from_petpooja": True,
+            "petpooja_bill_numbers": bill_numbers,
+            "petpooja_comment": comment,
+            "status": OrderStatus.CONFIRMED.value,  # Move to confirmed once payment synced
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.orders.update_one({"id": order['id']}, {"$set": update_data})
+        
+        # Log the payment sync
+        log = Log(
+            order_id=order['id'],
+            action="payment_synced_from_petpooja",
+            performed_by="system",
+            after_data={
+                "bill_number": bill_number,
+                "amount": amount,
+                "payment_method": payment_method
+            }
+        )
+        log_doc = log.model_dump()
+        log_doc['timestamp'] = log_doc['timestamp'].isoformat()
+        await db.logs.insert_one(log_doc)
+        
+        logger.info(f"Payment synced for order {order_id}: ₹{amount}")
+        
+        # Send WhatsApp notification for payment confirmation
+        try:
+            await send_msg91_whatsapp(order['id'], WhatsAppTemplateEvent.ORDER_CONFIRMED)
+        except Exception as e:
+            logger.error(f"WhatsApp notification failed: {str(e)}")
+        
+        return {
+            "success": True,
+            "message": "Payment synced successfully",
+            "order_id": order['id'],
+            "order_number": order.get('order_number'),
+            "amount": amount,
+            "status": "confirmed"
+        }
+    
+    except Exception as e:
+        logger.error(f"PetPooja payment webhook error: {str(e)}")
+        return {"success": False, "message": str(e)}
+
 @api_router.get("/petpooja/webhook-url")
 async def get_petpooja_webhook_url(current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))):
-    """Get the PetPooja webhook URL to provide to PetPooja team"""
+    """Get the PetPooja webhook URLs to provide to PetPooja team"""
     # Get the actual backend URL from environment
     backend_url = os.environ.get('BACKEND_URL', os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001'))
-    webhook_url = f"{backend_url}/api/petpooja/callback"
+    callback_url = f"{backend_url}/api/petpooja/callback"
+    payment_url = f"{backend_url}/api/petpooja/payment-webhook"
     
     return {
-        "webhook_url": webhook_url,
-        "method": "POST",
-        "description": "Provide this URL to PetPooja team for order status callbacks",
-        "expected_fields": [
+        "payment_webhook_url": payment_url,
+        "status_callback_url": callback_url,
+        "payment_webhook_description": "For syncing bill/payment data - include Order ID in 'comment' field",
+        "status_callback_description": "For order status updates from PetPooja POS",
+        "payment_expected_fields": ["bill_number", "amount", "comment (Order ID)", "payment_method"],
+        "callback_expected_fields": [
             "restID", "orderID", "status", "cancel_reason", 
             "minimum_prep_time", "minimum_delivery_time", 
             "rider_name", "rider_phone_number", "is_modified"

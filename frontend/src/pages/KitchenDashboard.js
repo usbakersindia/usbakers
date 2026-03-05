@@ -1,0 +1,365 @@
+import { useEffect, useState } from 'react';
+import axios from 'axios';
+import LayoutWithSidebar from '../components/LayoutWithSidebar';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { CheckCircle, Clock, Filter } from 'lucide-react';
+
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const API = `${BACKEND_URL}/api`;
+
+const KitchenDashboard = () => {
+  const [orders, setOrders] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [outlets, setOutlets] = useState([]);
+  const [selectedOrders, setSelectedOrders] = useState([]);
+  const [loading, setLoading] = useState(false);
+  
+  // Filters
+  const [filters, setFilters] = useState({
+    date: new Date().toISOString().split('T')[0],
+    outlet_id: '',
+    status: '',
+    size: '',
+    flavour: ''
+  });
+
+  useEffect(() => {
+    fetchOutlets();
+    fetchOrders();
+    fetchSummary();
+  }, [filters]);
+
+  const fetchOutlets = async () => {
+    try {
+      const response = await axios.get(`${API}/outlets`);
+      setOutlets(response.data);
+    } catch (error) {
+      console.error('Failed to fetch outlets:', error);
+    }
+  };
+
+  const fetchOrders = async () => {
+    try {
+      const params = new URLSearchParams();
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value) params.append(key, value);
+      });
+      
+      const response = await axios.get(`${API}/kitchen/orders?${params}`);
+      setOrders(response.data);
+    } catch (error) {
+      console.error('Failed to fetch orders:', error);
+    }
+  };
+
+  const fetchSummary = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (filters.date) params.append('date', filters.date);
+      if (filters.outlet_id) params.append('outlet_id', filters.outlet_id);
+      
+      const response = await axios.get(`${API}/kitchen/orders/summary?${params}`);
+      setSummary(response.data);
+    } catch (error) {
+      console.error('Failed to fetch summary:', error);
+    }
+  };
+
+  const toggleOrderSelection = (orderId) => {
+    setSelectedOrders(prev => 
+      prev.includes(orderId) 
+        ? prev.filter(id => id !== orderId)
+        : [...prev, orderId]
+    );
+  };
+
+  const markSelectedAsReady = async () => {
+    if (selectedOrders.length === 0) {
+      alert('Please select orders to mark as ready');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await axios.post(`${API}/kitchen/orders/mark-ready`, {
+        order_ids: selectedOrders
+      });
+      
+      alert(`${selectedOrders.length} orders marked as ready!`);
+      setSelectedOrders([]);
+      fetchOrders();
+      fetchSummary();
+    } catch (error) {
+      console.error('Failed to mark orders as ready:', error);
+      alert('Failed to mark orders as ready');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateBulkKOT = () => {
+    if (selectedOrders.length === 0) {
+      alert('Please select orders to generate KOT');
+      return;
+    }
+    
+    // Filter selected orders
+    const ordersForKOT = orders.filter(o => selectedOrders.includes(o.id));
+    
+    // Generate print content
+    const printContent = ordersForKOT.map(order => `
+      <div style="page-break-after: always; padding: 20px; border: 2px solid #000; margin-bottom: 20px;">
+        <h2 style="text-align: center;">US Bakers - KOT</h2>
+        <hr/>
+        <p><strong>Order #:</strong> ${order.order_number}</p>
+        <p><strong>Delivery Date:</strong> ${order.delivery_date}</p>
+        <p><strong>Delivery Time:</strong> ${order.delivery_time}</p>
+        <hr/>
+        <h3>Order Details:</h3>
+        <p><strong>Flavour:</strong> ${order.flavour}</p>
+        <p><strong>Size:</strong> ${order.size_pounds} lbs</p>
+        <p><strong>Name on Cake:</strong> ${order.name_on_cake || 'N/A'}</p>
+        <p><strong>Special Instructions:</strong> ${order.special_instructions || 'None'}</p>
+        <hr/>
+        <p><strong>Customer:</strong> ${order.customer_info?.name}</p>
+        <p><strong>Phone:</strong> ${order.customer_info?.phone}</p>
+      </div>
+    `).join('');
+
+    const printWindow = window.open('', '', 'height=600,width=800');
+    printWindow.document.write('<html><head><title>Bulk KOT</title></head><body>');
+    printWindow.document.write(printContent);
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      confirmed: 'bg-blue-100 text-blue-800',
+      ready: 'bg-green-100 text-green-800',
+      picked_up: 'bg-purple-100 text-purple-800',
+      delivered: 'bg-green-500 text-white'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  return (
+    <LayoutWithSidebar>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold">Kitchen Dashboard</h1>
+          <div className="flex gap-2">
+            <Button onClick={generateBulkKOT} disabled={selectedOrders.length === 0}>
+              Generate Bulk KOT ({selectedOrders.length})
+            </Button>
+            <Button 
+              onClick={markSelectedAsReady} 
+              disabled={selectedOrders.length === 0 || loading}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Mark as Ready ({selectedOrders.length})
+            </Button>
+          </div>
+        </div>
+
+        {/* Summary Cards */}
+        {summary && (
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{summary.total_orders}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Pending Production</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">{summary.pending_production}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Ready</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">{summary.ready}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Picked Up</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-purple-600">{summary.picked_up}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Delivered</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-gray-600">{summary.delivered}</div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Filters */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              Filters
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div>
+                <Label>Date</Label>
+                <Input 
+                  type="date" 
+                  value={filters.date}
+                  onChange={(e) => setFilters({...filters, date: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label>Outlet</Label>
+                <Select value={filters.outlet_id} onValueChange={(value) => setFilters({...filters, outlet_id: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Outlets" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Outlets</SelectItem>
+                    {outlets.map(outlet => (
+                      <SelectItem key={outlet.id} value={outlet.id}>{outlet.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Status</Label>
+                <Select value={filters.status} onValueChange={(value) => setFilters({...filters, status: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All Status</SelectItem>
+                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                    <SelectItem value="ready">Ready</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Size (lbs)</Label>
+                <Input 
+                  type="number" 
+                  placeholder="All sizes"
+                  value={filters.size}
+                  onChange={(e) => setFilters({...filters, size: e.target.value})}
+                />
+              </div>
+              <div>
+                <Label>Flavour</Label>
+                <Input 
+                  placeholder="All flavours"
+                  value={filters.flavour}
+                  onChange={(e) => setFilters({...filters, flavour: e.target.value})}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Orders Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Orders ({orders.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <input 
+                      type="checkbox" 
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedOrders(orders.map(o => o.id));
+                        } else {
+                          setSelectedOrders([]);
+                        }
+                      }}
+                      checked={selectedOrders.length === orders.length && orders.length > 0}
+                    />
+                  </TableHead>
+                  <TableHead>Order #</TableHead>
+                  <TableHead>Delivery</TableHead>
+                  <TableHead>Flavour</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead>Name on Cake</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Customer</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {orders.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-gray-500">No orders found</TableCell>
+                  </TableRow>
+                ) : (
+                  orders.map(order => (
+                    <TableRow key={order.id}>
+                      <TableCell>
+                        <input 
+                          type="checkbox" 
+                          checked={selectedOrders.includes(order.id)}
+                          onChange={() => toggleOrderSelection(order.id)}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{order.order_number}</TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <div>{order.delivery_date}</div>
+                          <div className="text-gray-500">{order.delivery_time}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{order.flavour}</TableCell>
+                      <TableCell>{order.size_pounds} lbs</TableCell>
+                      <TableCell>{order.name_on_cake || '-'}</TableCell>
+                      <TableCell>
+                        <Badge className={getStatusColor(order.status)}>
+                          {order.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <div>{order.customer_info?.name}</div>
+                          <div className="text-gray-500">{order.customer_info?.phone}</div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+    </LayoutWithSidebar>
+  );
+};
+
+export default KitchenDashboard;
