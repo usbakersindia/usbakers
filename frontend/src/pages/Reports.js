@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import LayoutWithSidebar from '../components/LayoutWithSidebar';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,8 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { FileText, DollarSign, Truck } from 'lucide-react';
-import { useEffect } from 'react';
+import { FileText, DollarSign, Truck, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -97,6 +97,117 @@ const Reports = () => {
     }
   };
 
+  // Excel Export Functions
+  const exportOrdersToExcel = () => {
+    if (!orderReport) return;
+
+    const ws_data = [
+      ['Order Report'],
+      ['Period', `${filters.start_date} to ${filters.end_date}`],
+      [],
+      ['Summary'],
+      ['Total Orders', orderReport.summary.total_orders],
+      ['Total Amount', orderReport.summary.total_amount],
+      ['Total Paid', orderReport.summary.total_paid],
+      ['Total Pending', orderReport.summary.total_pending],
+      [],
+      ['Order Number', 'Customer', 'Phone', 'Outlet', 'Order Type', 'Status', 'Delivery Date', 'Amount', 'Paid', 'Pending']
+    ];
+
+    orderReport.orders.forEach(order => {
+      ws_data.push([
+        order.order_number,
+        order.customer_info?.name || 'N/A',
+        order.customer_info?.phone || 'N/A',
+        order.outlet_name,
+        order.order_type,
+        order.status,
+        order.delivery_date,
+        order.total_amount,
+        order.paid_amount,
+        order.pending_amount
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(ws_data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Orders');
+    XLSX.writeFile(wb, `orders_report_${filters.start_date}_to_${filters.end_date}.xlsx`);
+  };
+
+  const exportPaymentsToExcel = () => {
+    if (!paymentReport) return;
+
+    const ws_data = [
+      ['Payment Report'],
+      ['Period', `${filters.start_date} to ${filters.end_date}`],
+      [],
+      ['Summary'],
+      ['Total Payments', paymentReport.summary.total_payments],
+      ['Total Amount', paymentReport.summary.total_amount],
+      [],
+      ['Payment Method Breakdown'],
+      ['Method', 'Count', 'Amount']
+    ];
+
+    paymentReport.summary.payment_methods.forEach(method => {
+      ws_data.push([method.method, method.count, method.amount]);
+    });
+
+    ws_data.push([]);
+    ws_data.push(['Order Number', 'Customer', 'Payment Method', 'Amount', 'Paid At', 'Outlet']);
+
+    paymentReport.payments.forEach(payment => {
+      ws_data.push([
+        payment.order_number,
+        payment.customer_name,
+        payment.payment_method,
+        payment.amount,
+        new Date(payment.paid_at).toLocaleString(),
+        payment.outlet_name
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(ws_data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Payments');
+    XLSX.writeFile(wb, `payments_report_${filters.start_date}_to_${filters.end_date}.xlsx`);
+  };
+
+  const exportDeliveryToExcel = () => {
+    if (!deliveryReport) return;
+
+    const ws_data = [
+      ['Delivery Report'],
+      ['Period', `${filters.start_date} to ${filters.end_date}`],
+      [],
+      ['Summary'],
+      ['Total Deliveries', deliveryReport.summary.total_deliveries],
+      ['Pending Pickup', deliveryReport.summary.pending_pickup],
+      ['Out for Delivery', deliveryReport.summary.out_for_delivery],
+      ['Delivered', deliveryReport.summary.delivered],
+      [],
+      ['Order Number', 'Customer', 'Phone', 'Address', 'Delivery Date', 'Status', 'Outlet']
+    ];
+
+    deliveryReport.deliveries.forEach(delivery => {
+      ws_data.push([
+        delivery.order_number,
+        delivery.customer_name,
+        delivery.customer_phone,
+        delivery.delivery_address,
+        delivery.delivery_date,
+        delivery.status,
+        delivery.outlet_name
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(ws_data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Deliveries');
+    XLSX.writeFile(wb, `delivery_report_${filters.start_date}_to_${filters.end_date}.xlsx`);
+  };
+
   return (
     <LayoutWithSidebar>
       <div className="space-y-6">
@@ -168,9 +279,17 @@ const Reports = () => {
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle>Order Report</CardTitle>
-                  <Button onClick={fetchOrderReport} disabled={loading}>
-                    {loading ? 'Loading...' : 'Generate Report'}
-                  </Button>
+                  <div className="flex gap-2">
+                    {orderReport && (
+                      <Button variant="outline" onClick={exportOrdersToExcel}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Export to Excel
+                      </Button>
+                    )}
+                    <Button onClick={fetchOrderReport} disabled={loading}>
+                      {loading ? 'Loading...' : 'Generate Report'}
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -237,9 +356,17 @@ const Reports = () => {
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle>Payment Report</CardTitle>
-                  <Button onClick={fetchPaymentReport} disabled={loading}>
-                    {loading ? 'Loading...' : 'Generate Report'}
-                  </Button>
+                  <div className="flex gap-2">
+                    {paymentReport && (
+                      <Button variant="outline" onClick={exportPaymentsToExcel}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Export to Excel
+                      </Button>
+                    )}
+                    <Button onClick={fetchPaymentReport} disabled={loading}>
+                      {loading ? 'Loading...' : 'Generate Report'}
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -289,9 +416,17 @@ const Reports = () => {
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle>Delivery Report</CardTitle>
-                  <Button onClick={fetchDeliveryReport} disabled={loading}>
-                    {loading ? 'Loading...' : 'Generate Report'}
-                  </Button>
+                  <div className="flex gap-2">
+                    {deliveryReport && (
+                      <Button variant="outline" onClick={exportDeliveryToExcel}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Export to Excel
+                      </Button>
+                    )}
+                    <Button onClick={fetchDeliveryReport} disabled={loading}>
+                      {loading ? 'Loading...' : 'Generate Report'}
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>

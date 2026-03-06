@@ -24,9 +24,11 @@ import {
   Calendar,
   Search,
   ArrowRightLeft,
-  Ban
+  Ban,
+  Download
 } from 'lucide-react';
 import axios from 'axios';
+import * as XLSX from 'xlsx';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -265,6 +267,42 @@ const ManageOrders = () => {
     }
   };
 
+  const exportOrdersToExcel = () => {
+    if (!filteredOrders || filteredOrders.length === 0) {
+      alert('No orders to export');
+      return;
+    }
+
+    const ws_data = [
+      ['Orders Export'],
+      ['Generated', new Date().toLocaleString()],
+      [],
+      ['Order #', 'Customer', 'Phone', 'Type', 'Occasion', 'Flavour', 'Size', 'Delivery Date', 'Status', 'Total', 'Paid', 'Pending']
+    ];
+
+    filteredOrders.forEach(order => {
+      ws_data.push([
+        order.order_number,
+        order.customer_info?.name || 'N/A',
+        order.customer_info?.phone || 'N/A',
+        order.order_type,
+        order.occasion || 'N/A',
+        order.flavour || 'N/A',
+        order.size || 'N/A',
+        order.delivery_date || 'N/A',
+        order.status,
+        order.total_amount,
+        order.paid_amount,
+        order.pending_amount || 0
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(ws_data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Orders');
+    XLSX.writeFile(wb, `orders_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   const handlePrintKOT = (order) => {
     // Open print window with KOT
     const printWindow = window.open('', '_blank');
@@ -361,9 +399,15 @@ const ManageOrders = () => {
     <LayoutWithSidebar>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold" style={{ color: '#e92587' }}>Manage Orders</h1>
-          <p className="text-gray-600 mt-1">Track and manage all bakery orders</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold" style={{ color: '#e92587' }}>Manage Orders</h1>
+            <p className="text-gray-600 mt-1">Track and manage all bakery orders</p>
+          </div>
+          <Button variant="outline" onClick={exportOrdersToExcel} disabled={!filteredOrders || filteredOrders.length === 0}>
+            <Download className="h-4 w-4 mr-2" />
+            Export to Excel
+          </Button>
         </div>
 
         {message.text && (
