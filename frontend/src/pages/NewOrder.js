@@ -151,8 +151,30 @@ const NewOrder = () => {
     setFormData({ ...formData, secondary_images: newImages });
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e, isPunchOrder = false) => {
     e.preventDefault();
+    
+    // Validate for punch orders
+    if (isPunchOrder) {
+      const errors = [];
+      if (!formData.customer_info.name) errors.push('Customer name');
+      if (!formData.customer_info.phone) errors.push('Customer phone');
+      if (!formData.order_taken_by) errors.push('Order taken by');
+      if (!formData.occasion) errors.push('Occasion');
+      if (!formData.flavour) errors.push('Flavour');
+      if (!formData.delivery_date) errors.push('Delivery date');
+      if (!formData.delivery_time) errors.push('Delivery time');
+      if (!formData.total_amount || formData.total_amount <= 0) errors.push('Cake amount');
+      if (formData.needs_delivery && !formData.delivery_address) errors.push('Delivery address');
+      if (formData.needs_delivery && !formData.zone_id) errors.push('Delivery zone');
+      
+      if (errors.length > 0) {
+        setError(`Missing required fields: ${errors.join(', ')}`);
+        setLoading(false);
+        return;
+      }
+    }
+    
     setError('');
     setSuccess('');
     setLoading(true);
@@ -171,15 +193,17 @@ const NewOrder = () => {
     }
 
     try {
-      const response = await axios.post(`${API}/orders`, formData);
+      const response = await axios.post(`${API}/orders?is_punch_order=${isPunchOrder}`, formData);
       const createdOrder = response.data;
       
-      setSuccess(`Order created! ID: ${createdOrder.order_number} - Status: PENDING (awaiting payment sync from PetPooja)`);
-      
-      // Show order ID prominently
-      alert(`✅ Order Created Successfully!\n\nOrder ID: ${createdOrder.order_number}\n\nStatus: PENDING\n\nIMPORTANT: Add this Order ID in PetPooja "Comment" field to sync payment automatically.`);
-      
-      setTimeout(() => navigate('/hold-orders'), 2000);
+      if (isPunchOrder) {
+        setSuccess(`✅ Punch Order Created! Order #: ${createdOrder.order_number}`);
+        alert(`✅ Punch Order Created!\n\nOrder #: ${createdOrder.order_number}\n\nStatus: Pending (waiting for 20% payment)\n\nIMPORTANT: Add Order # in PetPooja comment field.`);
+        setTimeout(() => navigate('/pending-orders'), 2000);
+      } else {
+        setSuccess(`✅ Hold Order Created! Order #: ${createdOrder.order_number}`);
+        setTimeout(() => navigate('/hold-orders'), 2000);
+      }
     } catch (error) {
       setError(error.response?.data?.detail || 'Failed to create order');
     } finally {
@@ -483,14 +507,18 @@ const NewOrder = () => {
                     onValueChange={(value) => setFormData({ ...formData, order_taken_by: value })}
                   >
                     <SelectTrigger data-testid="order-taken-by-select">
-                      <SelectValue placeholder="Select user" />
+                      <SelectValue placeholder="Select sales person" />
                     </SelectTrigger>
                     <SelectContent>
-                      {users.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name} ({user.incentive_percentage}% incentive)
-                        </SelectItem>
-                      ))}
+                      {salesPersons.length === 0 ? (
+                        <SelectItem value="none" disabled>No sales persons available</SelectItem>
+                      ) : (
+                        salesPersons.map(person => (
+                          <SelectItem key={person.id} value={person.id}>
+                            {person.name}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -668,15 +696,44 @@ const NewOrder = () => {
               Cancel
             </Button>
             <Button
-              type="submit"
+              type="button"
+              variant="outline"
+              onClick={(e) => handleSubmit(e, false)}
+              disabled={loading || uploadingImage}
+              data-testid="hold-order-button"
+            >
+              {loading ? 'Creating...' : 'Hold Order'}
+            </Button>
+            <Button
+              type="button"
+              onClick={(e) => handleSubmit(e, true)}
               disabled={loading || uploadingImage}
               className="text-white"
               style={{ backgroundColor: '#e92587' }}
-              data-testid="submit-order-button"
+              data-testid="punch-order-button"
             >
-              {loading ? 'Creating Order...' : 'Create Order'}
+              {loading ? 'Creating...' : 'Punch Order'}
             </Button>
           </div>
+          {selectedZone && formData.total_amount > 0 && (
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm font-medium mb-2">Order Summary:</p>
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span>Cake Amount:</span>
+                  <span className="font-semibold">₹{formData.total_amount}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Delivery Charge:</span>
+                  <span className="font-semibold">₹{selectedZone.delivery_charge}</span>
+                </div>
+                <div className="flex justify-between border-t pt-2 mt-2">
+                  <span className="font-bold">Total Amount:</span>
+                  <span className="font-bold text-lg">₹{parseFloat(formData.total_amount) + parseFloat(selectedZone.delivery_charge)}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </form>
       </div>
     </LayoutWithSidebar>
