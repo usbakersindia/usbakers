@@ -78,6 +78,33 @@ class Gender(str, Enum):
     FEMALE = "female"
     OTHER = "other"
 
+# ==================== SALES PERSONS (for order_taken_by) ====================
+
+class SalesPerson(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    phone: Optional[str] = None
+    outlet_id: str  # Which outlet this sales person belongs to
+    is_active: bool = True
+    created_by: str  # Super Admin who created
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class SalesPersonCreate(BaseModel):
+    name: str
+    phone: Optional[str] = None
+    outlet_id: str
+
+# ==================== SYSTEM SETTINGS ====================
+
+class SystemSettings(BaseModel):
+    id: str = "system_settings"  # Singleton
+    minimum_payment_percentage: float = 20.0  # Default 20%
+    updated_by: Optional[str] = None
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class SystemSettingsUpdate(BaseModel):
+    minimum_payment_percentage: float
+
 # ==================== PERMISSIONS ====================
 # Define all available permissions in the system
 AVAILABLE_PERMISSIONS = {
@@ -742,6 +769,94 @@ async def get_order_takers(current_user: User = Depends(get_current_user)):
     users = await db.users.find(query, {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "outlet_id": 1}).to_list(1000)
     
     return [{"id": u["id"], "name": u["name"], "email": u["email"], "role": u["role"]} for u in users]
+
+# ==================== SALES PERSONS MANAGEMENT ====================
+
+@api_router.post("/sales-persons")
+async def create_sales_person(
+    person_data: SalesPersonCreate,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Create a sales person (Super Admin only)"""
+    person = SalesPerson(
+        name=person_data.name,
+        phone=person_data.phone,
+        outlet_id=person_data.outlet_id,
+        created_by=current_user.id
+    )
+    
+    doc = person.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    
+    await db.sales_persons.insert_one(doc)
+    
+    return {"message": "Sales person created successfully", "id": person.id}
+
+@api_router.get("/sales-persons")
+async def get_sales_persons(
+    outlet_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get sales persons (filtered by outlet for non-super-admin)"""
+    query = {"is_active": True}
+    
+    # Filter by outlet
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
+        query["outlet_id"] = current_user.outlet_id
+    elif outlet_id:
+        query["outlet_id"] = outlet_id
+    
+    persons = await db.sales_persons.find(query, {"_id": 0}).to_list(1000)
+    
+    return persons
+
+@api_router.delete("/sales-persons/{person_id}")
+async def delete_sales_person(
+    person_id: str,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Delete/deactivate a sales person (Super Admin only)"""
+    await db.sales_persons.update_one(
+        {"id": person_id},
+        {"$set": {"is_active": False}}
+    )
+    
+    return {"message": "Sales person deactivated"}
+
+# ==================== SYSTEM SETTINGS ====================
+
+@api_router.get("/system-settings")
+async def get_system_settings(current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))):
+    """Get system settings (Super Admin only)"""
+    settings = await db.system_settings.find_one({"id": "system_settings"}, {"_id": 0})
+    
+    if not settings:
+        # Create default settings
+        default_settings = SystemSettings()
+        doc = default_settings.model_dump()
+        doc['updated_at'] = doc['updated_at'].isoformat()
+        await db.system_settings.insert_one(doc)
+        return default_settings.model_dump()
+    
+    return settings
+
+@api_router.patch("/system-settings")
+async def update_system_settings(
+    settings_data: SystemSettingsUpdate,
+    current_user: User = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Update system settings (Super Admin only)"""
+    await db.system_settings.update_one(
+        {"id": "system_settings"},
+        {"$set": {
+            "minimum_payment_percentage": settings_data.minimum_payment_percentage,
+            "updated_by": current_user.id,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }},
+        upsert=True
+    )
+    
+    return {"message": "Settings updated successfully"}
 
 @api_router.patch("/users/{user_id}/toggle-active")
 async def toggle_user_active(
