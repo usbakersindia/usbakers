@@ -21,8 +21,10 @@ PROJECT_DIR=$(pwd)
 echo -e "${YELLOW}📂 Project Directory: $PROJECT_DIR${NC}"
 echo ""
 
-# Step 1: Pull latest code
+# Step 1: Fix Git ownership and pull latest code
 echo -e "${GREEN}Step 1: Pulling latest code from GitHub...${NC}"
+# Add safe directory exception for Git
+git config --global --add safe.directory "$PROJECT_DIR" 2>/dev/null || true
 git pull origin main || git pull origin master
 echo "✅ Code updated successfully"
 echo ""
