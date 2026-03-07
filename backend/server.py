@@ -1070,19 +1070,36 @@ async def upload_image(
 @api_router.post("/orders")
 async def create_order(
     order_data: OrderCreate,
+    is_punch_order: bool = False,
     current_user: User = Depends(get_current_user)
 ):
-    """Create a new order"""
+    """Create a new order (punch or hold)"""
     # Validate outlet exists
     outlet = await db.outlets.find_one({"id": order_data.outlet_id}, {"_id": 0})
     if not outlet:
         raise HTTPException(status_code=404, detail="Outlet not found")
     
-    # Validate zone if delivery is needed
+    # Calculate delivery charge if needed
+    delivery_charge = 0.0
     if order_data.needs_delivery and order_data.zone_id:
         zone = await db.zones.find_one({"id": order_data.zone_id}, {"_id": 0})
         if not zone:
             raise HTTPException(status_code=404, detail="Zone not found")
+        delivery_charge = zone.get('delivery_charge', 0.0)
+    
+    # Calculate total amount (cake + delivery)
+    total_amount = order_data.total_amount + delivery_charge
+    pending_amount = total_amount
+    
+    # Determine lifecycle status and order status
+    if is_punch_order:
+        lifecycle_status = "pending_payment"
+        order_status = OrderStatus.PENDING
+        is_hold = False
+    else:
+        lifecycle_status = "hold"
+        order_status = OrderStatus.ON_HOLD
+        is_hold = True
     
     # Create order
     order = Order(
@@ -1102,12 +1119,16 @@ async def create_order(
         special_instructions=order_data.special_instructions,
         delivery_date=order_data.delivery_date,
         delivery_time=order_data.delivery_time,
+        status=order_status,
+        lifecycle_status=lifecycle_status,
         outlet_id=order_data.outlet_id,
         created_by=current_user.id,
-        order_taken_by=current_user.id,
-        total_amount=order_data.total_amount,
-        is_hold=True,  # Always starts in hold
-        delivery_otp=str(random.randint(100000, 999999)) if order_data.needs_delivery else None  # Generate 6-digit OTP
+        order_taken_by=order_data.order_taken_by,
+        is_punch_order=is_punch_order,
+        total_amount=total_amount,
+        pending_amount=pending_amount,
+        is_hold=is_hold,
+        delivery_otp=str(random.randint(100000, 999999)) if order_data.needs_delivery else None
     )
     
     doc = order.model_dump()
@@ -1116,13 +1137,19 @@ async def create_order(
     
     await db.orders.insert_one(doc)
     
-    # Send ORDER_PLACED WhatsApp notification (async, don't block)
+    # Send WhatsApp notification
     try:
         await send_whatsapp_notification(order.id, WhatsAppTemplateEvent.ORDER_PLACED)
     except Exception as e:
-        logger.error(f"WhatsApp notification failed for order {order.id}: {str(e)}")
+        logger.error(f"WhatsApp notification failed: {str(e)}")
     
-    return {"message": "Order created successfully", "order_id": order.id, "order_number": order.order_number}
+    return {
+        "message": f"{'Punch' if is_punch_order else 'Hold'} order created successfully",
+        "order_id": order.id,
+        "order_number": order.order_number,
+        "lifecycle_status": lifecycle_status,
+        "total_amount": total_amount
+    }
 
 @api_router.get("/orders/hold")
 async def get_hold_orders(
@@ -1148,13 +1175,84 @@ async def get_hold_orders(
     
     return orders
 
+@api_router.get("/orders/pending")
+async def get_pending_orders(
+    outlet_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get punch orders waiting for payment (permission-based access)"""
+    query = {"lifecycle_status": "pending_payment", "is_deleted": False}
+    
+    # Filter by outlet if user is not super admin
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
+        query["outlet_id"] = current_user.outlet_id
+    elif outlet_id:
+        query["outlet_id"] = outlet_id
+    
+    orders = await db.orders.find(query, {"_id": 0}).to_list(1000)
+    
+    # Convert date fields
+    for order in orders:
+        if isinstance(order.get('created_at'), str):
+            order['created_at'] = datetime.fromisoformat(order['created_at'])
+        if isinstance(order.get('updated_at'), str):
+            order['updated_at'] = datetime.fromisoformat(order['updated_at'])
+    
+    return orders
+
+@api_router.post("/orders/{order_id}/release")
+async def release_hold_order(
+    order_id: str,
+    order_updates: Dict[str, Any],
+    current_user: User = Depends(get_current_user)
+):
+    """Release a hold order by completing required info"""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order.get('lifecycle_status') != 'hold':
+        raise HTTPException(status_code=400, detail="Order is not on hold")
+    
+    # Get system settings for payment threshold
+    settings = await db.system_settings.find_one({"id": "system_settings"}, {"_id": 0})
+    min_percentage = settings.get('minimum_payment_percentage', 20.0) if settings else 20.0
+    
+    # Update order with completed info
+    update_data = order_updates.copy()
+    
+    # Calculate payment percentage
+    paid_amount = update_data.get('paid_amount', order.get('paid_amount', 0))
+    total_amount = order['total_amount']
+    payment_percentage = (paid_amount / total_amount * 100) if total_amount > 0 else 0
+    
+    # Determine new lifecycle status
+    if payment_percentage >= min_percentage:
+        update_data['lifecycle_status'] = 'active'
+        update_data['status'] = 'confirmed'
+    else:
+        update_data['lifecycle_status'] = 'pending_payment'
+        update_data['status'] = 'pending'
+    
+    update_data['is_hold'] = False
+    update_data['pending_amount'] = total_amount - paid_amount
+    update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+    
+    await db.orders.update_one({"id": order_id}, {"$set": update_data})
+    
+    return {
+        "message": "Order released successfully",
+        "lifecycle_status": update_data['lifecycle_status'],
+        "payment_percentage": payment_percentage
+    }
+
 @api_router.get("/orders/manage")
 async def get_manage_orders(
     outlet_id: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Get all orders in manage (not hold, not deleted)"""
-    query = {"is_hold": False, "is_deleted": False}
+    """Get all active orders in manage (not hold, not pending, not deleted)"""
+    query = {"lifecycle_status": "active", "is_deleted": False}
     
     # Filter by outlet if user is not super admin
     if current_user.role != UserRole.SUPER_ADMIN and current_user.outlet_id:
@@ -1928,13 +2026,36 @@ async def petpooja_payment_webhook(request_data: Dict[str, Any]):
         if bill_number and bill_number not in bill_numbers:
             bill_numbers.append(bill_number)
         
+        # Get minimum payment threshold from settings
+        settings = await db.system_settings.find_one({"id": "system_settings"}, {"_id": 0})
+        min_percentage = settings.get('minimum_payment_percentage', 20.0) if settings else 20.0
+        
+        # Calculate payment percentage
+        total_amount = order.get('total_amount', 0)
+        payment_percentage = (new_paid_amount / total_amount * 100) if total_amount > 0 else 0
+        
+        # Determine lifecycle status and order status
+        current_lifecycle = order.get('lifecycle_status', 'pending_payment')
+        new_lifecycle_status = current_lifecycle
+        new_status = order.get('status', 'pending')
+        
+        # Check if order should move from pending_payment to active
+        if current_lifecycle == 'pending_payment' and payment_percentage >= min_percentage:
+            new_lifecycle_status = 'active'
+            new_status = 'confirmed'
+            logger.info(f"Order {order['id']} moved to active (payment: {payment_percentage:.1f}% >= {min_percentage}%)")
+        elif current_lifecycle == 'pending_payment':
+            logger.info(f"Order {order['id']} still pending (payment: {payment_percentage:.1f}% < {min_percentage}%)")
+        
         update_data = {
             "paid_amount": new_paid_amount,
             "pending_amount": new_pending,
             "payment_synced_from_petpooja": True,
             "petpooja_bill_numbers": bill_numbers,
             "petpooja_comment": comment,
-            "status": OrderStatus.CONFIRMED.value,  # Move to confirmed once payment synced
+            "lifecycle_status": new_lifecycle_status,
+            "status": new_status,
+            "is_hold": False,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
         
