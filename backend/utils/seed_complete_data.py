@@ -116,7 +116,10 @@ async def seed_data():
             "id": "outlet-dhangu",
             "name": "Dhangu Road",
             "address": "123 Dhangu Road, Dehradun",
+            "city": "Dehradun",
             "phone": "9876543210",
+            "username": "dhangu_outlet",
+            "ready_time_buffer_minutes": 30,
             "is_active": True,
             "created_at": datetime.now(timezone.utc).isoformat()
         },
@@ -124,7 +127,10 @@ async def seed_data():
             "id": "outlet-railway",
             "name": "Railway Road",
             "address": "456 Railway Road, Dehradun",
+            "city": "Dehradun",
             "phone": "9876543211",
+            "username": "railway_outlet",
+            "ready_time_buffer_minutes": 30,
             "is_active": True,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
