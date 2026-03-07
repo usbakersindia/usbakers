@@ -20,9 +20,14 @@ const Sidebar = () => {
     ? [
         // Super Admin Menu
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'nav-dashboard' },
+        { path: '/new-order', label: 'New Order', icon: ShoppingCart, testId: 'nav-new-order' },
+        { path: '/pending-orders', label: 'Pending Orders', icon: Clock, testId: 'nav-pending-orders' },
+        { path: '/hold-orders', label: 'Hold Orders', icon: Clock, testId: 'nav-hold-orders' },
+        { path: '/manage-orders', label: 'Manage Orders', icon: List, testId: 'nav-manage-orders' },
         { path: '/customers', label: 'Customers', icon: Users, testId: 'nav-customers' },
         { path: '/outlets', label: 'Outlets', icon: Store, testId: 'nav-outlets' },
         { path: '/users', label: 'Users', icon: Users, testId: 'nav-users' },
+        { path: '/sales-persons', label: 'Sales Persons', icon: Users, testId: 'nav-sales-persons' },
         { path: '/zones', label: 'Zones', icon: MapPin, testId: 'nav-zones' },
         { path: '/permissions', label: 'Permissions', icon: Settings, testId: 'nav-permissions' },
         { path: '/reports', label: 'Reports', icon: Receipt, testId: 'nav-reports' },
@@ -45,6 +50,7 @@ const Sidebar = () => {
               // Outlet Admin menu - NO Settings
               { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'nav-dashboard' },
               { path: '/new-order', label: 'New Order', icon: ShoppingCart, testId: 'nav-new-order' },
+              { path: '/pending-orders', label: 'Pending Orders', icon: Clock, testId: 'nav-pending-orders' },
               { path: '/hold-orders', label: 'Hold Orders', icon: Clock, testId: 'nav-hold-orders' },
               { path: '/manage-orders', label: 'Manage Orders', icon: List, testId: 'nav-manage-orders' },
               { path: '/customers', label: 'Customers', icon: Users, testId: 'nav-customers' },

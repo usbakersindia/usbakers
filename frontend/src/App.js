@@ -9,6 +9,7 @@ import ZoneManagement from './pages/ZoneManagement';
 import Settings from './pages/Settings';
 import NewOrder from './pages/NewOrder';
 import HoldOrders from './pages/HoldOrders';
+import PendingOrders from './pages/PendingOrders';
 import Customers from './pages/Customers';
 import MSG91Settings from './pages/MSG91Settings';
 import ManageOrders from './pages/ManageOrders';
@@ -17,6 +18,7 @@ import DeliveryDashboard from './pages/DeliveryDashboard';
 import Reports from './pages/Reports';
 import PermissionManagement from './pages/PermissionManagement';
 import PetPoojaSettings from './pages/PetPoojaSettings';
+import SalesPersonManagement from './pages/SalesPersonManagement';
 import '@/App.css';
 
 const AppRoutes = () => {
@@ -69,10 +71,26 @@ const AppRoutes = () => {
         }
       />
       <Route
+        path="/pending-orders"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
+            <PendingOrders />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/manage-orders"
         element={
           <ProtectedRoute allowedRoles={['super_admin', 'outlet_admin', 'order_manager']}>
             <ManageOrders />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sales-persons"
+        element={
+          <ProtectedRoute allowedRoles={['super_admin']}>
+            <SalesPersonManagement />
           </ProtectedRoute>
         }
       />
