@@ -71,7 +71,8 @@ const UserManagementNew = () => {
   const fetchPermissions = async () => {
     try {
       const response = await axios.get(`${API}/permissions/available`);
-      setAvailablePermissions(response.data);
+      // API returns { permissions: {...}, roles: [...] }
+      setAvailablePermissions(response.data.permissions || {});
     } catch (error) {
       console.error('Failed to fetch permissions:', error);
     }
