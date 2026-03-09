@@ -181,7 +181,7 @@ class UserResponse(BaseModel):
     phone: str
     role: UserRole
     permissions: List[str]
-    incentive_percentage: float
+    incentive_percentage: float = 0.0
     outlet_id: Optional[str] = None
     is_active: bool
     created_at: datetime

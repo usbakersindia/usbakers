@@ -50,7 +50,10 @@ const UserManagementNew = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await axios.get(`${API}/users`);
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API}/users`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setUsers(response.data);
     } catch (error) {
       console.error('Failed to fetch users:', error);
@@ -61,7 +64,10 @@ const UserManagementNew = () => {
 
   const fetchOutlets = async () => {
     try {
-      const response = await axios.get(`${API}/outlets`);
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API}/outlets`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setOutlets(response.data);
     } catch (error) {
       console.error('Failed to fetch outlets:', error);
@@ -70,7 +76,10 @@ const UserManagementNew = () => {
 
   const fetchPermissions = async () => {
     try {
-      const response = await axios.get(`${API}/permissions/available`);
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API}/permissions/available`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       // API returns { permissions: {...}, roles: [...] }
       setAvailablePermissions(response.data.permissions || {});
     } catch (error) {
@@ -115,7 +124,10 @@ const UserManagementNew = () => {
     setSuccess('');
 
     try {
-      await axios.post(`${API}/users`, formData);
+      const token = localStorage.getItem('token');
+      await axios.post(`${API}/users`, formData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setSuccess('User created successfully!');
       setDialogOpen(false);
       setFormData({
@@ -136,7 +148,10 @@ const UserManagementNew = () => {
 
   const toggleUserActive = async (userId) => {
     try {
-      await axios.patch(`${API}/users/${userId}/toggle-active`);
+      const token = localStorage.getItem('token');
+      await axios.patch(`${API}/users/${userId}/toggle-active`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       fetchUsers();
     } catch (error) {
       console.error('Failed to toggle user status:', error);
@@ -157,8 +172,11 @@ const UserManagementNew = () => {
 
   const updateUserPermissions = async () => {
     try {
+      const token = localStorage.getItem('token');
       await axios.patch(`${API}/users/${selectedUser.id}/permissions`, {
         permissions: editPermissions
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       setSuccess('Permissions updated successfully!');
       setPermissionsDialogOpen(false);
@@ -184,8 +202,11 @@ const UserManagementNew = () => {
     }
     
     try {
+      const token = localStorage.getItem('token');
       await axios.patch(`${API}/users/${selectedUser.id}/password`, {
         password: newPassword
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       setSuccess(`Password reset successfully for ${selectedUser.name}!`);
       setPasswordDialogOpen(false);
